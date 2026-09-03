@@ -651,7 +651,19 @@
     const token = getToken();
     if (!token) return;
 
-    const { ok, data } = await apiRequest('GET', '/auth/me/', null, true);
+    let { ok, data } = await apiRequest('GET', '/auth/me/', null, true);
+
+    // If access token is expired (401), try to refresh it first
+    if (!ok && data && (data.code === 'token_not_valid' || data.detail?.includes('token') || data.detail?.includes('expired'))) {
+      const refreshed = await tryRefreshToken();
+      if (refreshed) {
+        // Retry /auth/me/ with the new access token
+        const retry = await apiRequest('GET', '/auth/me/', null, true);
+        ok = retry.ok;
+        data = retry.data;
+      }
+    }
+
     if (ok) {
       currentUser = data;
       currentUser.name = data.display_name || data.name || data.email.split('@')[0];
@@ -660,8 +672,33 @@
       await syncCartFromServer();
       await syncWishlistFromServer();
     } else {
-      // Token expired — clear it
+      // Both access and refresh tokens are invalid — clear everything
       clearTokens();
+      localStorage.removeItem('currentUser');
+    }
+  }
+
+  // Attempt to exchange the refresh token for a new access token
+  async function tryRefreshToken() {
+    const refresh = localStorage.getItem('bh_refresh_token');
+    if (!refresh) return false;
+    try {
+      const res = await fetch(`${API_BASE}/auth/token/refresh/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refresh }),
+      });
+      if (!res.ok) return false;
+      const result = await res.json();
+      if (result.access) {
+        localStorage.setItem('bh_access_token', result.access);
+        // ROTATE_REFRESH_TOKENS=True means the server may issue a new refresh token too
+        if (result.refresh) localStorage.setItem('bh_refresh_token', result.refresh);
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
     }
   }
 

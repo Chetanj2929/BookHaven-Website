@@ -81,6 +81,13 @@ DATABASES = {
 # ---- Custom User Model ----
 AUTH_USER_MODEL = 'users.User'
 
+# ---- Authentication Backends ----
+# Explicitly use ModelBackend so authenticate(username=email) works correctly
+# with USERNAME_FIELD = 'email' on the custom User model.
+AUTHENTICATION_BACKENDS = [
+    'django.contrib.auth.backends.ModelBackend',
+]
+
 # ---- Password Validation ----
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
