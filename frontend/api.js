@@ -118,28 +118,96 @@
     }
   };
 
-  // Override: handleGoogleAuth
-  window.handleGoogleAuth = async function () {
-    showNotification('Connecting to Google…', 'info');
-    // Simulate Google response (no real OAuth in this demo)
+  // ─── Real Google Identity Services (GIS) OAuth ───────────────────────────────
+
+  // Decode a JWT credential returned by GIS without any library.
+  // We only need the payload for the name/email/picture — the backend
+  // must do the real cryptographic verification using the raw id_token.
+  function decodeJwtPayload(token) {
+    try {
+      const base64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+      return JSON.parse(atob(base64));
+    } catch (err) {
+      console.warn('[BookHaven] JWT decode failed:', err);
+      return {};
+    }
+  }
+
+  // Called by GIS after the user picks their Google account in the popup
+  async function onGoogleCredential(response) {
+    const payload = decodeJwtPayload(response.credential);
+    const name    = payload.name    || payload.email?.split('@')[0] || 'Google User';
+    const email   = payload.email   || '';
+    const picture = payload.picture || '';
+
+    showNotification('Signing in with Google…', 'info');
+
+    // Send the raw signed JWT to the backend for server-side verification.
+    // Also forward email/name so the backend can create the user record.
     const { ok, data } = await apiRequest('POST', '/auth/google/', {
-      email: 'googleuser@gmail.com',
-      name: 'Google User',
+      id_token: response.credential,
+      email,
+      name,
     });
+
     if (ok) {
       setTokens(data.access, data.refresh);
       currentUser = data.user;
-      currentUser.name = data.user.display_name || 'Google User';
+      currentUser.name = data.user.display_name || name;
+      if (picture) currentUser.picture = picture;
       localStorage.setItem('currentUser', JSON.stringify(currentUser));
       updateUIForLoggedInUser();
       closeLogin();
-      showNotification(data.message || 'Welcome! 🎉', 'success');
+      showNotification(`Welcome, ${currentUser.name}! 🎉`, 'success');
       await syncCartFromServer();
       await syncWishlistFromServer();
     } else {
       showNotification(extractError(data), 'error');
     }
-  };
+  }
+
+  // Initialize GIS and render the real Google button into both form containers
+  function initGoogleSignIn() {
+    if (!window.google?.accounts?.id) return; // GIS not ready yet
+
+    const CLIENT_ID = '330850017701-spbdkdclj1oj9hmhm2k2cqql1ulogh6v.apps.googleusercontent.com';
+
+    google.accounts.id.initialize({
+      client_id: CLIENT_ID,
+      callback: onGoogleCredential,
+      ux_mode: 'popup',
+    });
+
+    const loginContainer  = document.getElementById('google-login-container');
+    const signupContainer = document.getElementById('google-signup-container');
+
+    if (loginContainer) {
+      google.accounts.id.renderButton(loginContainer, {
+        type: 'standard', theme: 'outline', size: 'large',
+        text: 'signin_with', shape: 'rectangular', width: 340,
+      });
+    }
+    if (signupContainer) {
+      google.accounts.id.renderButton(signupContainer, {
+        type: 'standard', theme: 'outline', size: 'large',
+        text: 'signup_with', shape: 'rectangular', width: 340,
+      });
+    }
+
+    console.info('%c✅ Google Identity Services initialized', 'color:#4285F4;font-weight:bold;');
+  }
+
+  // GIS loads asynchronously (async defer) — poll until it's ready, then initialize
+  (function waitForGIS() {
+    const tryInit = setInterval(() => {
+      if (window.google?.accounts?.id) {
+        clearInterval(tryInit);
+        initGoogleSignIn();
+      }
+    }, 100);
+    // Give up after 10 seconds to avoid infinite polling if GIS fails to load
+    setTimeout(() => clearInterval(tryInit), 10000);
+  })();
 
   // Override: handleLogout
   window.handleLogout = async function () {
