@@ -114,9 +114,18 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOW_CREDENTIALS = True
 
+# ---- Clerk Authentication ----
+# The publishable key is safe to expose; the secret key must stay server-side.
+CLERK_FRONTEND_API_URL = os.getenv('CLERK_FRONTEND_API_URL', 'https://ready-stag-1023.clerk.accounts.dev')
+CLERK_SECRET_KEY = os.getenv('CLERK_SECRET_KEY', '')
+
 # ---- Django REST Framework ----
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
+        # ClerkJWTAuthentication must come FIRST — it inspects the token and
+        # falls through (returns None) for non-Clerk tokens so simplejwt still
+        # handles legacy tokens and Django Admin sessions.
+        'users.clerk_auth.ClerkJWTAuthentication',
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ),
     'DEFAULT_PERMISSION_CLASSES': (

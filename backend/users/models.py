@@ -12,6 +12,10 @@ class User(AbstractUser):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    # Clerk authentication — stores the Clerk user ID (user_xxx…) so we can
+    # look up this user without relying on email matching.
+    clerk_user_id = models.CharField(max_length=255, blank=True, null=True, unique=True, db_index=True)
+
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = ['username']
 

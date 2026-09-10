@@ -120,7 +120,7 @@ function updateUIForLoggedOutUser() {
   const loginBtn = document.getElementById('login-btn');
   const userMenu = document.getElementById('user-menu');
   const adminLink = document.getElementById('admin-panel-link');
-  if (avatar) avatar.classList.remove('active');
+  if (avatar) { avatar.classList.remove('active'); avatar.textContent = 'A'; }
   if (loginBtn) loginBtn.style.display = 'block';
   if (userMenu) userMenu.classList.remove('active');
   if (adminLink) adminLink.style.display = 'none';
@@ -2084,7 +2084,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('cart-btn').addEventListener('click', openCart);
   document.getElementById('checkout-btn').addEventListener('click', checkout);
   document.getElementById('user-avatar').addEventListener('click', toggleUserMenu);
-  document.getElementById('logout-btn').addEventListener('click', (e) => { e.preventDefault(); handleLogout(); });
+  document.getElementById('logout-btn').addEventListener('click', (e) => { e.preventDefault(); (window.handleLogout || handleLogout)(); });
 
   // Close menus/modals on backdrop or outside
   document.addEventListener('click', (e) => {
@@ -2106,8 +2106,10 @@ document.addEventListener('DOMContentLoaded', () => {
   // Auth form events
   document.getElementById('login-form').addEventListener('submit', handleLogin);
   document.getElementById('signup-form').addEventListener('submit', handleSignup);
-  document.getElementById('google-login').addEventListener('click', handleGoogleAuth);
-  document.getElementById('google-signup').addEventListener('click', handleGoogleAuth);
+  const googleLoginBtn = document.getElementById('google-login');
+  if (googleLoginBtn) googleLoginBtn.addEventListener('click', handleGoogleAuth);
+  const googleSignupBtn = document.getElementById('google-signup');
+  if (googleSignupBtn) googleSignupBtn.addEventListener('click', handleGoogleAuth);
   document.getElementById('to-signup').addEventListener('click', (e) => { e.preventDefault(); switchAuthTab('signup'); });
   document.getElementById('to-login').addEventListener('click', (e) => { e.preventDefault(); switchAuthTab('login'); });
   document.getElementById('forgot-link').addEventListener('click', (e) => { e.preventDefault(); showNotification('Password reset link sent to your email 📧', 'info'); });

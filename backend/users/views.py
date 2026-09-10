@@ -12,6 +12,7 @@ from .serializers import (
     UserProfileSerializer,
     UserUpdateSerializer,
 )
+from .clerk_auth import ClerkJWTAuthentication
 
 
 def get_tokens_for_user(user):
@@ -119,6 +120,54 @@ class GoogleAuthView(APIView):
             user.set_unusable_password()
             user.save()
 
+        tokens = get_tokens_for_user(user)
+        profile = UserProfileSerializer(user).data
+        return Response({
+            'message': f'Welcome, {user.get_display_name()}! 🎉',
+            'user': profile,
+            **tokens,
+        })
+
+
+class ClerkSyncView(APIView):
+    """
+    POST /api/auth/clerk-sync/
+
+    Called by api.js immediately after a successful Clerk sign-in.
+    Accepts the raw Clerk session JWT, verifies it, and either finds
+    or creates the corresponding Django User.  Returns the user profile
+    plus a simplejwt access/refresh pair so that all other Django API
+    endpoints (orders, cart, reviews…) keep working without modification.
+
+    Request body:
+        { "clerk_token": "<Clerk session JWT>" }
+
+    Response:
+        { "message": "…", "user": {…}, "access": "…", "refresh": "…" }
+    """
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        clerk_token = request.data.get('clerk_token', '').strip()
+        if not clerk_token:
+            return Response({'detail': 'clerk_token is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Re-use ClerkJWTAuthentication to verify and resolve the user.
+        # We build a fake request object so we can call authenticate() directly.
+        class _FakeRequest:
+            def __init__(self, token):
+                self.META = {'HTTP_AUTHORIZATION': f'Bearer {token}'}
+
+        authenticator = ClerkJWTAuthentication()
+        try:
+            result = authenticator.authenticate(_FakeRequest(clerk_token))
+        except Exception as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_401_UNAUTHORIZED)
+
+        if result is None:
+            return Response({'detail': 'Invalid or non-Clerk token.'}, status=status.HTTP_401_UNAUTHORIZED)
+
+        user, _ = result
         tokens = get_tokens_for_user(user)
         profile = UserProfileSerializer(user).data
         return Response({

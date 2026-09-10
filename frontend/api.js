@@ -4,6 +4,7 @@
  * This file patches the existing script.js functions with real API calls.
  * Loaded AFTER script.js so overrides take effect cleanly.
  *
+ * Authentication: Clerk (https://clerk.com) — replaces custom JWT forms.
  * Django backend must be running at: http://127.0.0.1:8000
  */
 
@@ -12,9 +13,12 @@
 
   // ─── Config ─────────────────────────────────────────────────────────────────
   const API_BASE = 'http://127.0.0.1:8000/api';
+  const CLERK_PUBLISHABLE_KEY = 'pk_test_cmVhZHktc3RhZy0xMDIzLmNsZXJrLmFjY291bnRzLmRldiQ';
   window.wishlist = [];
 
   // ─── Token helpers ──────────────────────────────────────────────────────────
+  // We store the simplejwt token that /api/auth/clerk-sync/ returns.
+  // All Django API calls use this token so the backend stays unchanged.
   function getToken() { return localStorage.getItem('bh_access_token'); }
   function setTokens(access, refresh) {
     localStorage.setItem('bh_access_token', access);
@@ -55,208 +59,227 @@
     return Array.isArray(first) ? first[0] : String(first);
   }
 
-  // ─── Auth overrides ─────────────────────────────────────────────────────────
+  // ─── Clerk Authentication ────────────────────────────────────────────────────
 
-  // Override: handleLogin
-  window.handleLogin = async function (e) {
-    e.preventDefault();
-    const email = document.getElementById('login-email').value.trim();
-    const password = document.getElementById('login-password').value;
-    if (!email || !password) return showNotification('Please fill in all fields', 'error');
+  /**
+   * Called once after Clerk.load() resolves (Clerk JS v5+).
+   * In v5, window.Clerk itself is the fully initialized instance —
+   * Clerk.load() returns undefined, not a clerk object.
+   */
+  async function initClerkAuth() {
+    const clerk = window.Clerk; // v5: instance lives on window.Clerk
 
-    const btn = e.target.querySelector('button[type="submit"]');
-    if (btn) { btn.disabled = true; btn.textContent = 'Signing in…'; }
-
-    const { ok, data } = await apiRequest('POST', '/auth/login/', { email, password });
-
-    if (btn) { btn.disabled = false; btn.textContent = 'Sign In'; }
-
-    if (ok) {
-      setTokens(data.access, data.refresh);
-      currentUser = data.user;
-      currentUser.name = data.user.display_name || data.user.name || email.split('@')[0];
-      localStorage.setItem('currentUser', JSON.stringify(currentUser));
-      updateUIForLoggedInUser();
-      closeLogin();
-      showNotification(data.message || `Welcome back! 👋`, 'success');
-      await syncCartFromServer();
-      await syncWishlistFromServer();
-    } else {
-      showNotification(extractError(data), 'error');
+    // 1. Wire the Login button → Clerk sign-in modal
+    const loginBtn = document.getElementById('login-btn');
+    if (loginBtn) {
+      loginBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        clerk.openSignIn();
+      });
     }
-  };
 
-  // Override: handleSignup
-  window.handleSignup = async function (e) {
-    e.preventDefault();
-    const name = document.getElementById('signup-name').value.trim();
-    const email = document.getElementById('signup-email').value.trim();
-    const password = document.getElementById('signup-password').value;
-    const confirm = document.getElementById('signup-confirm').value;
-
-    if (!name || !email || !password || !confirm) return showNotification('Please fill in all fields', 'error');
-    if (password !== confirm) return showNotification('Passwords do not match!', 'error');
-    if (password.length < 8) return showNotification('Password must be at least 8 characters', 'error');
-
-    const btn = e.target.querySelector('button[type="submit"]');
-    if (btn) { btn.disabled = true; btn.textContent = 'Creating account…'; }
-
-    const { ok, data } = await apiRequest('POST', '/auth/register/', { name, email, password, confirm_password: confirm });
-
-    if (btn) { btn.disabled = false; btn.textContent = 'Create Account'; }
-
-    if (ok) {
-      setTokens(data.access, data.refresh);
-      currentUser = data.user;
-      currentUser.name = data.user.display_name || name;
-      localStorage.setItem('currentUser', JSON.stringify(currentUser));
-      updateUIForLoggedInUser();
-      closeLogin();
-      showNotification(data.message || `Welcome, ${name}! 🎉`, 'success');
-    } else {
-      showNotification(extractError(data), 'error');
+    // 2. Intercept any attempt to show the old custom modal → redirect to Clerk
+    const oldLoginModal = document.getElementById('login-modal');
+    if (oldLoginModal) {
+      const observer = new MutationObserver(() => {
+        if (oldLoginModal.classList.contains('active') || oldLoginModal.getAttribute('aria-hidden') === 'false') {
+          oldLoginModal.classList.remove('active');
+          oldLoginModal.setAttribute('aria-hidden', 'true');
+          document.body.style.overflow = '';
+          clerk.openSignIn();
+        }
+      });
+      observer.observe(oldLoginModal, { attributes: true, attributeFilter: ['class', 'aria-hidden'] });
     }
-  };
 
-  // ─── Real Google Identity Services (GIS) OAuth ───────────────────────────────
+    // 3. Listen for Clerk auth state changes (v5 API: window.Clerk.addListener)
+    if (typeof clerk.addListener === 'function') {
+      clerk.addListener(async ({ user }) => {
+        if (user) {
+          await onClerkSignIn(user);
+        } else {
+          onClerkSignOut();
+        }
+      });
+    }
 
-  // Decode a JWT credential returned by GIS without any library.
-  // We only need the payload for the name/email/picture — the backend
-  // must do the real cryptographic verification using the raw id_token.
-  function decodeJwtPayload(token) {
+    // 4. If there is already an active session on page load, sync to Django now
+    if (clerk.user) {
+      await onClerkSignIn(clerk.user);
+    } else {
+      // No Clerk session — clear any stale legacy tokens (pre-Clerk Google OAuth sessions)
+      clearTokens();
+      localStorage.removeItem('currentUser');
+      currentUser = null;
+      if (typeof updateUIForLoggedOutUser === 'function') updateUIForLoggedOutUser();
+    }
+  }
+
+  /**
+   * Called when Clerk reports a signed-in user.
+   * Gets a fresh Clerk JWT → POSTs to /api/auth/clerk-sync/ → gets simplejwt tokens.
+   */
+  async function onClerkSignIn(clerkUser) {
+    const clerk = window.Clerk;
     try {
-      const base64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
-      return JSON.parse(atob(base64));
-    } catch (err) {
-      console.warn('[BookHaven] JWT decode failed:', err);
-      return {};
-    }
-  }
+      // Get a fresh short-lived session token from Clerk
+      const clerkToken = await clerk.session.getToken();
+      if (!clerkToken) return;
 
-  // Called by GIS after the user picks their Google account in the popup
-  async function onGoogleCredential(response) {
-    const payload = decodeJwtPayload(response.credential);
-    const name    = payload.name    || payload.email?.split('@')[0] || 'Google User';
-    const email   = payload.email   || '';
-    const picture = payload.picture || '';
+      // Exchange it for a Django simplejwt token pair
+      const { ok, data } = await apiRequest('POST', '/auth/clerk-sync/', { clerk_token: clerkToken });
 
-    showNotification('Signing in with Google…', 'info');
+      if (ok) {
+        setTokens(data.access, data.refresh);
 
-    // Send the raw signed JWT to the backend for server-side verification.
-    // Also forward email/name so the backend can create the user record.
-    const { ok, data } = await apiRequest('POST', '/auth/google/', {
-      id_token: response.credential,
-      email,
-      name,
-    });
+        // Build a currentUser shape compatible with script.js
+        currentUser = {
+          ...data.user,
+          name: data.user.display_name || clerkUser.fullName || clerkUser.primaryEmailAddress?.emailAddress?.split('@')[0] || 'User',
+          email: data.user.email || clerkUser.primaryEmailAddress?.emailAddress || '',
+          picture: clerkUser.imageUrl || '',
+        };
+        localStorage.setItem('currentUser', JSON.stringify(currentUser));
 
-    if (ok) {
-      setTokens(data.access, data.refresh);
-      currentUser = data.user;
-      currentUser.name = data.user.display_name || name;
-      if (picture) currentUser.picture = picture;
-      localStorage.setItem('currentUser', JSON.stringify(currentUser));
-      updateUIForLoggedInUser();
-      closeLogin();
-      showNotification(`Welcome, ${currentUser.name}! 🎉`, 'success');
-      await syncCartFromServer();
-      await syncWishlistFromServer();
-    } else {
-      showNotification(extractError(data), 'error');
-    }
-  }
+        updateUIForLoggedInUser();
 
-  // Initialize GIS and render the real Google button into both form containers
-  function initGoogleSignIn() {
-    if (!window.google?.accounts?.id) return; // GIS not ready yet
+        // Safety net: ensure old modal is closed
+        const oldModal = document.getElementById('login-modal');
+        if (oldModal) {
+          oldModal.classList.remove('active');
+          oldModal.setAttribute('aria-hidden', 'true');
+          document.body.style.overflow = '';
+        }
 
-    const CLIENT_ID = '330850017701-spbdkdclj1oj9hmhm2k2cqql1ulogh6v.apps.googleusercontent.com';
-
-    google.accounts.id.initialize({
-      client_id: CLIENT_ID,
-      callback: onGoogleCredential,
-      ux_mode: 'popup',
-    });
-
-    const loginContainer  = document.getElementById('google-login-container');
-    const signupContainer = document.getElementById('google-signup-container');
-
-    if (loginContainer) {
-      google.accounts.id.renderButton(loginContainer, {
-        type: 'standard', theme: 'outline', size: 'large',
-        text: 'signin_with', shape: 'rectangular', width: 340,
-      });
-    }
-    if (signupContainer) {
-      google.accounts.id.renderButton(signupContainer, {
-        type: 'standard', theme: 'outline', size: 'large',
-        text: 'signup_with', shape: 'rectangular', width: 340,
-      });
-    }
-
-    console.info('%c✅ Google Identity Services initialized', 'color:#4285F4;font-weight:bold;');
-  }
-
-  // GIS loads asynchronously (async defer) — poll until it's ready, then initialize
-  (function waitForGIS() {
-    const tryInit = setInterval(() => {
-      if (window.google?.accounts?.id) {
-        clearInterval(tryInit);
-        initGoogleSignIn();
+        showNotification(data.message || `Welcome, ${currentUser.name}! 👋`, 'success');
+        await syncCartFromServer();
+        await syncWishlistFromServer();
+      } else {
+        console.warn('[BookHaven] Clerk sync failed:', data);
+        showNotification('Sign-in sync failed. Please try again.', 'error');
       }
-    }, 100);
-    // Give up after 10 seconds to avoid infinite polling if GIS fails to load
-    setTimeout(() => clearInterval(tryInit), 10000);
-  })();
+    } catch (err) {
+      console.warn('[BookHaven] onClerkSignIn error:', err);
+    }
+  }
 
-  // Override: handleLogout
+  /** Called when Clerk reports a signed-out state. */
+  function onClerkSignOut() {
+    clearTokens();
+    localStorage.removeItem('currentUser');
+    currentUser = null;
+    cart = [];
+    window.wishlist = [];
+    // Reset UI — reuse script.js helper if available
+    if (typeof updateUIForLoggedOutUser === 'function') {
+      updateUIForLoggedOutUser();
+    } else {
+      window.location.reload();
+    }
+  }
+
+  // Override: handleLogout — Clerk-powered sign-out
   window.handleLogout = async function () {
     const confirmed = confirm('Are you sure you want to logout?');
     if (!confirmed) return;
-    
-    const refresh = localStorage.getItem('bh_refresh_token');
-    if (refresh) {
-      await apiRequest('POST', '/auth/logout/', { refresh }, true);
+
+    try {
+      // Blacklist the simplejwt refresh token on the Django side (best-effort)
+      const refresh = localStorage.getItem('bh_refresh_token');
+      if (refresh) {
+        await apiRequest('POST', '/auth/logout/', { refresh }, true);
+      }
+    } catch (_) { /* ignore */ }
+
+    // Sign out from Clerk — triggers the addListener callback above
+    if (window.Clerk) {
+      await window.Clerk.signOut();
+    } else {
+      clearTokens();
+      localStorage.removeItem('currentUser');
+      showNotification('Logged out successfully! 👋', 'success');
+      setTimeout(() => window.location.reload(), 800);
     }
-    
-    // Clear all auth state
-    clearTokens();
-    localStorage.removeItem('currentUser');
-    
-    showNotification('Logged out successfully! 👋', 'success');
-    
-    // Reload the page to cleanly reset all script.js local state (cart, UI, etc.)
-    setTimeout(() => {
-      window.location.reload();
-    }, 1000);
   };
 
-  // Override: handleSettingsSave
-  window.handleSettingsSave = async function () {
-    const name = document.getElementById('settings-name').value;
-    const phone = document.getElementById('settings-phone').value;
-    const address = document.getElementById('settings-address').value;
-    
-    // Call the PUT /api/auth/me/ endpoint to update backend data
-    const { ok, data } = await apiRequest('PUT', '/auth/me/', { name, phone, address }, true);
-    
-    if (ok) {
-      // Update local storage and UI
-      currentUser = { ...currentUser, ...data };
-      localStorage.setItem('currentUser', JSON.stringify(currentUser));
-      
-      const modal = document.getElementById('settings-modal');
-      if (modal) modal.classList.remove('active');
-      document.body.style.overflow = '';
-      
-      showNotification('Settings updated! ✅', 'success');
-      
-      // We must reload the page so the rest of the UI (which relies on local updateUIForLoggedInUser) updates correctly
-      setTimeout(() => window.location.reload(), 1000);
-    } else {
-      showNotification(extractError(data), 'error');
+  // ─── Boot Clerk ──────────────────────────────────────────────────────────────
+  /**
+   * Clerk JS v5 loads asynchronously via <script data-clerk-publishable-key>.
+   * After the script executes, window.Clerk is available. We call Clerk.load()
+   * to fully initialize, then call initClerkAuth().
+   *
+   * NOTE: In Clerk JS v5, Clerk.load() resolves with undefined — window.Clerk
+   * itself is the initialized clerk instance.
+   */
+  (function bootClerk() {
+    // Clear stale pre-Clerk localStorage sessions immediately so they don't
+    // flash a phantom avatar before Clerk's auth state is known.
+    const cachedUser = (() => { try { return JSON.parse(localStorage.getItem('currentUser') || 'null'); } catch { return null; } })();
+    const isLegacySession = cachedUser && !cachedUser.clerk_user_id && !cachedUser.id;
+    if (isLegacySession) {
+      console.info('[BookHaven] Clearing stale pre-Clerk session from localStorage.');
+      clearTokens();
+      localStorage.removeItem('currentUser');
     }
-  };
+
+    const TIMEOUT = 10000; // 10 s
+    const start = Date.now();
+
+    function tryInit() {
+      if (window.Clerk) {
+        window.Clerk.load({
+          appearance: {
+            variables: {
+              colorPrimary: '#6366f1',
+              colorBackground: '#0f172a',
+              colorText: '#f1f5f9',
+              colorInputBackground: '#1e293b',
+              colorInputText: '#f1f5f9',
+              borderRadius: '12px',
+            },
+          },
+        }).then(() => {
+          // v5: Clerk.load() resolves with undefined; window.Clerk IS the instance
+          console.info('%c[BookHaven] Clerk initialized', 'color:#6366f1;font-weight:bold;');
+          initClerkAuth();
+        }).catch((err) => {
+          console.error('[BookHaven] Clerk.load() failed:', err);
+        });
+        return;
+      }
+
+      if (Date.now() - start > TIMEOUT) {
+        console.warn('[BookHaven] Clerk SDK did not load within 10 s. Falling back to legacy auth.');
+        return;
+      }
+
+      setTimeout(tryInit, 100);
+    }
+
+    tryInit();
+  })();
+
+  // Shim old form handlers to open Clerk's modal instead
+  window.handleLogin = function (e) { if (e) e.preventDefault(); if (window.Clerk) window.Clerk.openSignIn(); };
+  window.handleSignup = function (e) { if (e) e.preventDefault(); if (window.Clerk) window.Clerk.openSignUp(); };
+
+  /** Called when Clerk reports a signed-out state. */
+  function onClerkSignOut() {
+    clearTokens();
+    localStorage.removeItem('currentUser');
+    currentUser = null;
+    cart = [];
+    window.wishlist = [];
+    // Reset UI — reuse script.js helper if available
+    if (typeof updateUIForLoggedOutUser === 'function') {
+      updateUIForLoggedOutUser();
+    } else {
+      // Fallback: reload to cleanly reset all local state
+      window.location.reload();
+    }
+  }
+
 
   // ─── Books override ─────────────────────────────────────────────────────────
 
@@ -714,39 +737,30 @@
   };
 
   // ─── Session restore ─────────────────────────────────────────────────────────
-
+  // Clerk's addListener (set up in initClerkAuth) is the authoritative session
+  // source and runs automatically on page load.
+  // restoreSession() provides a fast, optimistic UI restore from the localStorage
+  // cache so the avatar/name appear instantly — before Clerk's async check completes.
   async function restoreSession() {
     const token = getToken();
-    if (!token) return;
+    const cachedUser = localStorage.getItem('currentUser');
+    if (!token || !cachedUser) return;
 
-    let { ok, data } = await apiRequest('GET', '/auth/me/', null, true);
-
-    // If access token is expired (401), try to refresh it first
-    if (!ok && data && (data.code === 'token_not_valid' || data.detail?.includes('token') || data.detail?.includes('expired'))) {
-      const refreshed = await tryRefreshToken();
-      if (refreshed) {
-        // Retry /auth/me/ with the new access token
-        const retry = await apiRequest('GET', '/auth/me/', null, true);
-        ok = retry.ok;
-        data = retry.data;
+    try {
+      currentUser = JSON.parse(cachedUser);
+      if (currentUser) {
+        updateUIForLoggedInUser(); // Show UI immediately from cache
       }
-    }
-
-    if (ok) {
-      currentUser = data;
-      currentUser.name = data.display_name || data.name || data.email.split('@')[0];
-      localStorage.setItem('currentUser', JSON.stringify(currentUser));
-      updateUIForLoggedInUser();
-      await syncCartFromServer();
-      await syncWishlistFromServer();
-    } else {
-      // Both access and refresh tokens are invalid — clear everything
+    } catch (_) {
+      // Corrupted cache — clear it and let Clerk re-authenticate
       clearTokens();
       localStorage.removeItem('currentUser');
     }
+    // The Clerk listener will verify the session and call onClerkSignIn,
+    // which will refresh the token and update the UI authoritatively.
   }
 
-  // Attempt to exchange the refresh token for a new access token
+  // tryRefreshToken is kept for backward compat with simplejwt token flow
   async function tryRefreshToken() {
     const refresh = localStorage.getItem('bh_refresh_token');
     if (!refresh) return false;
