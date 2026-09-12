@@ -1,3 +1,13 @@
+// Dynamic API URL resolution for Localhost vs Production (Render)
+function getApiBaseUrl() {
+  if (window.BOOKHAVEN_API_URL) return window.BOOKHAVEN_API_URL.replace(/\/+$/, '');
+  if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+    return 'http://127.0.0.1:8000/api';
+  }
+  return '/api';
+}
+window.getApiBaseUrl = getApiBaseUrl;
+
 // ---- Security: HTML escape utility (prevents XSS) ----
 function escHtml(str) {
   if (str === null || str === undefined) return '';
@@ -117,6 +127,9 @@ const books = [
   { title: "The Silent Patient", author: "Alex Michaelides", price: 425, id: 28, category: "Mystery", image: "https://covers.openlibrary.org/b/isbn/9781250301697-L.jpg", rating: 4.5, reviews: 13700, ebook: true, badge: "Thriller" }
 ];
 
+// Expose books and cart globally to guarantee availability for api.js and modals
+window.books = books;
+
 // Trending books data (top 8 by popularity)
 const trendingBooks = [
   { rank: 1, bookId: 2, weeklyChange: '+12%', hot: true },
@@ -140,6 +153,7 @@ const offers = [
 ];
 
 let cart = [];
+window.cart = cart;
 let currentUser = null;
 
 // ---- Utilities ----
@@ -187,6 +201,8 @@ function updateUIForLoggedInUser() {
   if (emailEl) emailEl.textContent = currentUser.email;
   if (adminLink) {
     adminLink.style.display = (currentUser.is_staff || currentUser.is_superuser) ? '' : 'none';
+    const baseUrl = getApiBaseUrl().replace(/\/api\/?$/, '');
+    adminLink.href = baseUrl ? `${baseUrl}/admin/` : '/admin/';
   }
 }
 
@@ -205,7 +221,83 @@ function updateUIForLoggedOutUser() {
   if (signupForm) signupForm.reset();
 }
 
+// ---- Centralized Modal Lifecycle Manager ----
+const ModalManager = {
+  activeModal: null,
+  lastFocusedEl: null,
+
+  open(modalId, triggerEl = null) {
+    const modal = document.getElementById(modalId);
+    if (!modal) return;
+    if (this.activeModal && this.activeModal !== modal) {
+      this.close(this.activeModal.id, false);
+    }
+    this.activeModal = modal;
+    this.lastFocusedEl = triggerEl || document.activeElement;
+    modal.classList.add('active');
+    modal.setAttribute('aria-hidden', 'false');
+    document.body.style.overflow = 'hidden';
+
+    // Set focus safely
+    setTimeout(() => {
+      const focusTarget = modal.querySelector('input:not([disabled]):not([type="hidden"]), button:not([disabled])');
+      if (focusTarget) focusTarget.focus();
+    }, 60);
+  },
+
+  close(modalId = null, restoreFocus = true) {
+    const modal = modalId ? document.getElementById(modalId) : this.activeModal;
+    if (!modal) return;
+    modal.classList.remove('active');
+    modal.setAttribute('aria-hidden', 'true');
+    if (this.activeModal === modal) {
+      this.activeModal = null;
+    }
+    const anyActive = document.querySelector('.modal.active');
+    if (!anyActive) {
+      document.body.style.overflow = '';
+    }
+    if (restoreFocus && this.lastFocusedEl && typeof this.lastFocusedEl.focus === 'function') {
+      try { this.lastFocusedEl.focus(); } catch (_) {}
+      this.lastFocusedEl = null;
+    }
+  },
+
+  closeAll() {
+    document.querySelectorAll('.modal.active').forEach(m => {
+      m.classList.remove('active');
+      m.setAttribute('aria-hidden', 'true');
+    });
+    this.activeModal = null;
+    document.body.style.overflow = '';
+  }
+};
+window.ModalManager = ModalManager;
+
+function clearAuthErrors() {
+  document.querySelectorAll('#login-modal .form-input').forEach(input => {
+    input.classList.remove('input-error');
+  });
+  document.querySelectorAll('#login-modal .form-error-msg').forEach(msg => {
+    msg.textContent = '';
+    msg.classList.remove('visible');
+    msg.style.display = 'none';
+  });
+}
+
+function showAuthFieldError(inputId, errorId, message) {
+  const input = document.getElementById(inputId);
+  const errorEl = document.getElementById(errorId);
+  if (input) input.classList.add('input-error');
+  if (errorEl) {
+    errorEl.textContent = message;
+    errorEl.classList.add('visible');
+    errorEl.style.display = 'block';
+  }
+}
+
 function switchAuthTab(tab) {
+  clearAuthErrors();
   const loginForm = document.getElementById('login-form');
   const signupForm = document.getElementById('signup-form');
   const modalTitle = document.getElementById('auth-title');
@@ -213,60 +305,206 @@ function switchAuthTab(tab) {
   if (tab === 'login') {
     loginForm.style.display = '';
     signupForm.style.display = 'none';
-    modalTitle.textContent = 'Login';
+    modalTitle.textContent = 'Welcome to BookHaven';
+    const emailInput = document.getElementById('login-email');
+    if (emailInput) setTimeout(() => emailInput.focus(), 50);
   } else {
     signupForm.style.display = '';
     loginForm.style.display = 'none';
-    modalTitle.textContent = 'Create Account';
+    modalTitle.textContent = 'Create Reader Account';
+    const nameInput = document.getElementById('signup-name');
+    if (nameInput) setTimeout(() => nameInput.focus(), 50);
   }
 }
 
-function openLogin() {
-  const modal = document.getElementById('login-modal');
-  if (!modal) return;
-  modal.classList.add('active');
-  document.body.style.overflow = 'hidden';
-  switchAuthTab('login');
+function openLogin(tab = 'login', triggerEl = null) {
+  clearAuthErrors();
+  switchAuthTab(tab);
+  ModalManager.open('login-modal', triggerEl);
 }
 function closeLogin() {
-  const modal = document.getElementById('login-modal');
-  if (!modal) return;
-  modal.classList.remove('active');
-  document.body.style.overflow = 'auto';
+  clearAuthErrors();
+  ModalManager.close('login-modal');
+}
+window.openLogin = openLogin;
+window.closeLogin = closeLogin;
+window.switchAuthTab = switchAuthTab;
+
+async function handleLogin(e) {
+  if (e) e.preventDefault();
+  clearAuthErrors();
+
+  const emailEl = document.getElementById('login-email');
+  const passEl = document.getElementById('login-password');
+  const email = emailEl ? emailEl.value.trim() : '';
+  const password = passEl ? passEl.value : '';
+
+  let hasError = false;
+  if (!email) {
+    showAuthFieldError('login-email', 'error-login-email', 'Email address is required.');
+    hasError = true;
+  } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    showAuthFieldError('login-email', 'error-login-email', 'Please enter a valid email address.');
+    hasError = true;
+  }
+
+  if (!password) {
+    showAuthFieldError('login-password', 'error-login-password', 'Password is required.');
+    hasError = true;
+  }
+
+  if (hasError) return;
+
+  const btn = document.getElementById('login-submit-btn');
+  const originalBtnText = btn ? btn.textContent : 'Sign In';
+  if (btn) { btn.disabled = true; btn.textContent = 'Signing in...'; }
+
+  try {
+    // Attempt Django backend login
+    let loggedIn = false;
+    try {
+      const res = await fetch(`${getApiBaseUrl()}/auth/login/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.access) {
+        if (data.access) localStorage.setItem('bh_access_token', data.access);
+        if (data.refresh) localStorage.setItem('bh_refresh_token', data.refresh);
+        currentUser = {
+          ...data.user,
+          name: data.user.name || data.user.display_name || email.split('@')[0],
+          email: data.user.email || email,
+          loginDate: new Date().toISOString()
+        };
+        loggedIn = true;
+      } else if (res.status === 400 || res.status === 401) {
+        const errorMsg = data.detail || (Array.isArray(data.non_field_errors) ? data.non_field_errors[0] : 'Invalid email or password.');
+        showAuthFieldError('login-password', 'error-login-password', errorMsg);
+        return;
+      }
+    } catch (_) {
+      // Backend offline — fallback to frontend authentication
+    }
+
+    if (!loggedIn) {
+      const name = email.split('@')[0].replace(/\./g, ' ');
+      currentUser = {
+        name: name.charAt(0).toUpperCase() + name.slice(1),
+        email,
+        loginDate: new Date().toISOString()
+      };
+    }
+
+    localStorage.setItem('currentUser', JSON.stringify(currentUser));
+    updateUIForLoggedInUser();
+    closeLogin();
+    showNotification(`Welcome back, ${currentUser.name}! 👋`, 'success');
+  } catch (err) {
+    showAuthFieldError('login-password', 'error-login-password', 'An unexpected error occurred. Please try again.');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = originalBtnText; }
+  }
 }
 
-function handleLogin(e) {
-  e.preventDefault();
-  const email = document.getElementById('login-email').value.trim();
-  const password = document.getElementById('login-password').value;
-  if (!email || !password) return showNotification('Please fill in all fields', 'error');
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!emailRegex.test(email)) return showNotification('Please enter a valid email address', 'error');
-  const name = email.split('@')[0].replace(/\./g, ' ');
-  currentUser = { name: name.charAt(0).toUpperCase() + name.slice(1), email, loginDate: new Date().toISOString() };
-  localStorage.setItem('currentUser', JSON.stringify(currentUser));
-  updateUIForLoggedInUser();
-  closeLogin();
-  showNotification(`Welcome back, ${currentUser.name}! 👋`, 'success');
-}
+async function handleSignup(e) {
+  if (e) e.preventDefault();
+  clearAuthErrors();
 
-function handleSignup(e) {
-  e.preventDefault();
-  const name = document.getElementById('signup-name').value.trim();
-  const email = document.getElementById('signup-email').value.trim();
-  const password = document.getElementById('signup-password').value;
-  const confirm = document.getElementById('signup-confirm').value;
-  if (!name || !email || !password || !confirm) return showNotification('Please fill in all fields', 'error');
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!emailRegex.test(email)) return showNotification('Please enter a valid email address', 'error');
-  if (password !== confirm) return showNotification('Passwords do not match!', 'error');
-  if (password.length < 8) return showNotification('Password must be at least 8 characters', 'error');
-  currentUser = { name, email, signupDate: new Date().toISOString() };
-  localStorage.setItem('currentUser', JSON.stringify(currentUser));
-  updateUIForLoggedInUser();
-  closeLogin();
-  showNotification(`Account created! Welcome, ${name}! 🎉`, 'success');
+  const nameEl = document.getElementById('signup-name');
+  const emailEl = document.getElementById('signup-email');
+  const passEl = document.getElementById('signup-password');
+  const confirmEl = document.getElementById('signup-confirm');
+
+  const name = nameEl ? nameEl.value.trim() : '';
+  const email = emailEl ? emailEl.value.trim() : '';
+  const password = passEl ? passEl.value : '';
+  const confirm = confirmEl ? confirmEl.value : '';
+
+  let hasError = false;
+  if (!name || name.length < 2) {
+    showAuthFieldError('signup-name', 'error-signup-name', 'Full Name is required (minimum 2 characters).');
+    hasError = true;
+  }
+
+  if (!email) {
+    showAuthFieldError('signup-email', 'error-signup-email', 'Email address is required.');
+    hasError = true;
+  } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    showAuthFieldError('signup-email', 'error-signup-email', 'Please enter a valid email address.');
+    hasError = true;
+  }
+
+  if (!password) {
+    showAuthFieldError('signup-password', 'error-signup-password', 'Password is required.');
+    hasError = true;
+  } else if (password.length < 8) {
+    showAuthFieldError('signup-password', 'error-signup-password', 'Password must be at least 8 characters long.');
+    hasError = true;
+  }
+
+  if (!confirm) {
+    showAuthFieldError('signup-confirm', 'error-signup-confirm', 'Please confirm your password.');
+    hasError = true;
+  } else if (password !== confirm) {
+    showAuthFieldError('signup-confirm', 'error-signup-confirm', 'Passwords do not match.');
+    hasError = true;
+  }
+
+  if (hasError) return;
+
+  const btn = document.getElementById('signup-submit-btn');
+  const originalBtnText = btn ? btn.textContent : 'Create Account';
+  if (btn) { btn.disabled = true; btn.textContent = 'Creating Account...'; }
+
+  try {
+    // Attempt Django backend registration
+    let registered = false;
+    try {
+      const res = await fetch(`${getApiBaseUrl()}/auth/register/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email, password, confirm_password: confirm })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 201 && data.user) {
+        if (data.access) localStorage.setItem('bh_access_token', data.access);
+        if (data.refresh) localStorage.setItem('bh_refresh_token', data.refresh);
+        currentUser = {
+          ...data.user,
+          name: data.user.name || name,
+          email: data.user.email || email,
+          signupDate: new Date().toISOString()
+        };
+        registered = true;
+      } else if (res.status === 400) {
+        if (data.email) showAuthFieldError('signup-email', 'error-signup-email', Array.isArray(data.email) ? data.email[0] : String(data.email));
+        if (data.password) showAuthFieldError('signup-password', 'error-signup-password', Array.isArray(data.password) ? data.password[0] : String(data.password));
+        if (data.confirm_password) showAuthFieldError('signup-confirm', 'error-signup-confirm', Array.isArray(data.confirm_password) ? data.confirm_password[0] : String(data.confirm_password));
+        if (data.non_field_errors) showAuthFieldError('signup-name', 'error-signup-name', Array.isArray(data.non_field_errors) ? data.non_field_errors[0] : String(data.non_field_errors));
+        return;
+      }
+    } catch (_) {
+      // Backend offline — fallback to frontend registration
+    }
+
+    if (!registered) {
+      currentUser = { name, email, signupDate: new Date().toISOString() };
+    }
+
+    localStorage.setItem('currentUser', JSON.stringify(currentUser));
+    updateUIForLoggedInUser();
+    closeLogin();
+    showNotification(`Account created! Welcome, ${name}! 🎉`, 'success');
+  } catch (err) {
+    showAuthFieldError('signup-confirm', 'error-signup-confirm', 'An unexpected error occurred. Please try again.');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = originalBtnText; }
+  }
 }
+window.handleLogin = handleLogin;
+window.handleSignup = handleSignup;
 
 function handleGoogleAuth() {
   showNotification('Connecting to Google...', 'info');
@@ -464,24 +702,46 @@ function renderEbooks() {
   container.innerHTML = ebookList.map(book => buildBookCard(book)).join('');
 }
 
-function addToCart(id, format = 'physical') {
-  const book = books.find(b => b.id === id);
+function addToCart(id, format = 'physical', quantity = 1) {
+  const sourceBooks = Array.isArray(window.books) && window.books.length > 0 ? window.books : books;
+  const book = sourceBooks.find(b => b.id === Number(id));
   if (!book) return;
-  const cartId = `${id}-${format}`;
+
+  const qty = Math.max(1, Number(quantity) || 1);
+  const cartId = `${book.id}-${format}`;
   const itemPrice = format === 'ebook' ? Math.round(book.price * 0.6) : book.price;
   const existing = cart.find(item => item.cartId === cartId);
+
   if (existing) {
-    existing.quantity += 1;
+    existing.quantity += qty;
   } else {
     cart.push({
-      ...book, cartId, quantity: 1, price: itemPrice, format,
+      ...book,
+      id: book.id,
+      cartId,
+      quantity: qty,
+      price: itemPrice,
+      format,
       title: book.title + (format === 'ebook' ? ' (eBook)' : '')
     });
   }
+
   updateCartCount();
-  const label = format === 'ebook' ? '📱 eBook added to cart!' : '📚 Added to cart! 🎉';
-  showNotification(label, 'success');
+  const formatLabel = format === 'ebook' ? 'eBook' : 'Physical edition';
+  const qtyLabel = qty > 1 ? ` (${qty} copies)` : '';
+  showNotification(`"${book.title}" — ${formatLabel}${qtyLabel} added to your bag.`, 'success');
+
+  // If user has token, sync to server in background
+  const token = localStorage.getItem('bh_access_token');
+  if (token) {
+    fetch(`${getApiBaseUrl()}/orders/cart/add/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ book_id: book.id, format, quantity: qty })
+    }).catch(() => {});
+  }
 }
+window.addToCart = addToCart;
 
 function updateCartCount() {
   const countEl = document.getElementById('cart-count');
@@ -495,7 +755,7 @@ function updateCartCount() {
   }
 }
 
-function openCart() {
+function openCart(triggerEl = null) {
   const modal = document.getElementById('cart-modal');
   const itemsDiv = document.getElementById('cart-items');
   const totalDiv = document.getElementById('cart-total');
@@ -537,43 +797,46 @@ function openCart() {
     totalDiv.textContent = formatINR(finalTotal);
 
     const remaining = Math.max(0, 999 - subtotal);
-    const percent = Math.min(100, Math.round((subtotal / 999) * 100));
-    if (meterFill) meterFill.style.width = `${percent}%`;
     if (meterText) {
       meterText.textContent = isFreeShipping
-        ? '🎉 You have unlocked complimentary courier delivery!'
+        ? '🎉 Congratulations! You unlocked complimentary delivery'
         : `Add ${formatINR(remaining)} more for complimentary delivery`;
+    }
+    if (meterFill) {
+      meterFill.style.width = `${Math.min(100, Math.round((subtotal / 999) * 100))}%`;
     }
 
     itemsDiv.innerHTML = cart.map(item => `
-      <div class="cart-item-row" data-cart-id="${item.cartId}">
-        <img src="${escHtml(item.image)}" alt="${escHtml(item.title)}" class="cart-item-cover" onerror="this.style.display='none'" />
+      <div class="cart-item">
+        <img src="${item.image}" alt="${escHtml(item.title)}" class="cart-item-img" />
         <div class="cart-item-info">
-          <h4 class="cart-item-title">${escHtml(item.title)}</h4>
-          <span class="cart-item-format">${item.format === 'ebook' ? 'Digital Edition (eBook)' : 'Hardcover / Paperback'}</span>
-          <div class="cart-item-stepper">
-            <button class="stepper-btn" onclick="changeCartQty('${item.cartId}', -1)" aria-label="Decrease quantity">&minus;</button>
-            <span class="stepper-value">${item.quantity}</span>
-            <button class="stepper-btn" onclick="changeCartQty('${item.cartId}', 1)" aria-label="Increase quantity">&plus;</button>
+          <div class="cart-item-title">${escHtml(item.title)}</div>
+          <div class="cart-item-author">${escHtml(item.author)}</div>
+          <div class="cart-item-meta">
+            <span class="cart-item-fmt">${item.format === 'ebook' ? '📱 eBook' : '📚 Physical'}</span>
+            <span class="cart-item-unit">${formatINR(item.price)} each</span>
+          </div>
+          <div class="cart-item-actions">
+            <div class="cart-qty-ctrl">
+              <button onclick="changeCartQty('${item.cartId}', -1)" class="cart-qty-btn" aria-label="Decrease quantity">−</button>
+              <span class="cart-qty-num">${item.quantity}</span>
+              <button onclick="changeCartQty('${item.cartId}', 1)" class="cart-qty-btn" aria-label="Increase quantity">+</button>
+            </div>
+            <button onclick="removeCartItem('${item.cartId}')" class="cart-remove-btn" aria-label="Remove item">Remove</button>
           </div>
         </div>
-        <div class="cart-item-right">
-          <span class="cart-item-subtotal">${formatINR(item.price * item.quantity)}</span>
-          <button class="cart-item-remove-btn" onclick="removeCartItem('${item.cartId}')">Remove</button>
-        </div>
+        <div class="cart-item-total">${formatINR(item.price * item.quantity)}</div>
       </div>`).join('');
   }
-  modal.classList.add('active');
-  document.body.style.overflow = 'hidden';
+
+  ModalManager.open('cart-modal', triggerEl);
 }
 
 function closeCart() {
-  const modal = document.getElementById('cart-modal');
-  if (modal) {
-    modal.classList.remove('active');
-    document.body.style.overflow = 'auto';
-  }
+  ModalManager.close('cart-modal');
 }
+window.openCart = openCart;
+window.closeCart = closeCart;
 
 window.changeCartQty = function(cartId, delta) {
   const item = cart.find(i => i.cartId === cartId);
@@ -598,7 +861,7 @@ function checkout() {
   if (!currentUser) {
     showNotification('Please login to checkout!', 'error');
     closeCart();
-    openLogin();
+    openLogin('login');
     return;
   }
   closeCart();
@@ -612,21 +875,21 @@ let _selectedBank = null;
 let _selectedWallet = null;
 let _cardData = { number: '', name: '', expiry: '', cvv: '' };
 
-function openPaymentModal() {
+function openPaymentModal(triggerEl = null) {
   _pendingOrderBooks = [...cart];
   _activePayTab = 'upi';
   _selectedBank = null;
   _selectedWallet = null;
   _cardData = { number: '', name: '', expiry: '', cvv: '' };
   renderPaymentModal();
-  const modal = document.getElementById('payment-modal');
-  if (modal) { modal.classList.add('active'); document.body.style.overflow = 'hidden'; }
+  ModalManager.open('payment-modal', triggerEl);
 }
 
 function closePaymentModal() {
-  const modal = document.getElementById('payment-modal');
-  if (modal) { modal.classList.remove('active'); document.body.style.overflow = 'auto'; }
+  ModalManager.close('payment-modal');
 }
+window.openPaymentModal = openPaymentModal;
+window.closePaymentModal = closePaymentModal;
 
 function renderPaymentModal() {
   const total = cart.reduce((s, i) => s + i.price * i.quantity, 0);
@@ -1357,14 +1620,12 @@ function saveOrderRecord(books, total, txnId, method) {
 }
 
 // Open My Orders
-function openOrdersModal() {
+function openOrdersModal(triggerEl) {
   renderOrdersModal();
-  const modal = document.getElementById('orders-modal');
-  if (modal) { modal.classList.add('active'); document.body.style.overflow = 'hidden'; }
+  ModalManager.open('orders-modal', triggerEl);
 }
 function closeOrdersModal() {
-  const modal = document.getElementById('orders-modal');
-  if (modal) { modal.classList.remove('active'); document.body.style.overflow = 'auto'; }
+  ModalManager.close('orders-modal');
 }
 
 function renderOrdersModal() {
@@ -1740,18 +2001,16 @@ function saveReviews() {
   localStorage.setItem('bookReviews', JSON.stringify(reviewsDB));
 }
 
-function openReviewModal(purchasedBooks) {
-  reviewQueue = purchasedBooks;
+function openReviewModal(purchasedBooks, triggerEl) {
+  reviewQueue = purchasedBooks || [];
   reviewIndex = 0;
   currentReviewData = { rating: 0, text: '', photos: [] };
   renderReviewStep();
-  const modal = document.getElementById('review-modal');
-  if (modal) { modal.classList.add('active'); document.body.style.overflow = 'hidden'; }
+  ModalManager.open('review-modal', triggerEl);
 }
 
 function closeReviewModal() {
-  const modal = document.getElementById('review-modal');
-  if (modal) { modal.classList.remove('active'); document.body.style.overflow = 'auto'; }
+  ModalManager.close('review-modal');
 }
 
 const starLabels = ['', 'Poor 😞', 'Fair 😐', 'Good 😊', 'Great 😄', 'Excellent! 🤩'];
@@ -1952,14 +2211,12 @@ function regenerateBookCards() {
 }
 
 // ---- Profile Modal ----
-function openProfileModal() {
+function openProfileModal(triggerEl) {
   renderProfileModal();
-  const modal = document.getElementById('profile-modal');
-  if (modal) { modal.classList.add('active'); document.body.style.overflow = 'hidden'; }
+  ModalManager.open('profile-modal', triggerEl);
 }
 function closeProfileModal() {
-  const modal = document.getElementById('profile-modal');
-  if (modal) { modal.classList.remove('active'); document.body.style.overflow = 'auto'; }
+  ModalManager.close('profile-modal');
 }
 
 function renderProfileModal() {
@@ -2131,143 +2388,184 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  // Helper to handle book card clicks (reused for multiple containers)
-  function handleBookContainerClick(e, container) {
-    // eBook format toggle
+  // Helper to handle book card clicks (applied across all catalog grids)
+  function handleBookContainerClick(e) {
+    const card = e.target.closest('.book-card');
+    if (!card) return;
+    const id = Number(card.getAttribute('data-id'));
+    const selectedFmtBtn = card.querySelector('.format-btn.selected');
+    const fmt = selectedFmtBtn ? selectedFmtBtn.dataset.fmt : 'physical';
+
+    // 1. Format toggle
     const fmtBtn = e.target.closest('[data-fmt]');
     if (fmtBtn) {
       e.stopPropagation();
-      const bookId = Number(fmtBtn.dataset.bookId);
-      const fmt = fmtBtn.dataset.fmt;
-      fmtBtn.closest('.book-format-row').querySelectorAll('.format-btn').forEach(b => b.classList.remove('selected'));
+      const bookId = Number(fmtBtn.dataset.bookId || id);
+      const clickedFmt = fmtBtn.dataset.fmt;
+      card.querySelectorAll('.format-btn').forEach(b => b.classList.remove('selected'));
       fmtBtn.classList.add('selected');
-      // Update price display
-      const card = fmtBtn.closest('.book-card');
-      const book = books.find(b => b.id === bookId);
-      if (card && book) {
+      const sourceBooks = Array.isArray(window.books) && window.books.length > 0 ? window.books : books;
+      const b = sourceBooks.find(bk => bk.id === bookId);
+      if (b) {
         const priceEl = card.querySelector('.book-price');
-        if (priceEl) priceEl.textContent = formatINR(fmt === 'ebook' ? Math.round(book.price * 0.6) : book.price);
+        if (priceEl) priceEl.textContent = formatINR(clickedFmt === 'ebook' ? Math.round(b.price * 0.6) : b.price);
       }
       return;
     }
 
-    const card = e.target.closest('.book-card');
-    if (!card) return;
-    const id = Number(card.getAttribute('data-id'));
-
-    // Determine selected format
-    const selectedFmtBtn = card.querySelector('.format-btn.selected');
-    const fmt = selectedFmtBtn ? selectedFmtBtn.dataset.fmt : 'physical';
-
-    if (e.target.matches('[data-add-to-cart]')) {
+    // 2. Quick View button
+    const qvBtn = e.target.closest('[data-quick-view]');
+    if (qvBtn) {
       e.stopPropagation();
-      addToCart(id, fmt);
-      e.target.classList.remove('pulsing');
-      void e.target.offsetWidth;
-      e.target.classList.add('pulsing');
-      e.target.addEventListener('animationend', () => e.target.classList.remove('pulsing'), { once: true });
-    } else if (e.target.closest('[data-see-reviews]')) {
+      showQuickView(id, qvBtn);
+      return;
+    }
+
+    // 3. Add to Cart / Bag button
+    const addBtn = e.target.closest('[data-add-to-cart]');
+    if (addBtn) {
       e.stopPropagation();
-      const bid = Number(e.target.closest('[data-see-reviews]').dataset.seeReviews);
+      addToCart(id, fmt, 1);
+      addBtn.classList.remove('pulsing');
+      void addBtn.offsetWidth;
+      addBtn.classList.add('pulsing');
+      addBtn.addEventListener('animationend', () => addBtn.classList.remove('pulsing'), { once: true });
+      return;
+    }
+
+    // 4. Wishlist button
+    const wBtn = e.target.closest('.wishlist-btn');
+    if (wBtn) {
+      e.stopPropagation();
+      const bid = Number(wBtn.dataset.wishlistBook || id);
+      wBtn.style.transform = 'scale(1.2)';
+      setTimeout(() => wBtn.style.transform = 'scale(1)', 200);
+      if (window.toggleWishlist) window.toggleWishlist(bid);
+      else showNotification('Wishlist updated!', 'info');
+      return;
+    }
+
+    // 5. Reviews button
+    const revBtn = e.target.closest('[data-see-reviews]');
+    if (revBtn) {
+      e.stopPropagation();
+      const bid = Number(revBtn.dataset.seeReviews || id);
       showAllReviews(bid);
-    } else if (e.target.closest('[data-lightbox-idx]')) {
-      e.stopPropagation();
-      const src = e.target.getAttribute('src');
-      if (src) openLightbox(src);
-    } else if (e.target.closest('.wishlist-btn')) {
-      e.stopPropagation();
-      const btn = e.target.closest('.wishlist-btn');
-      const bid = Number(btn.dataset.wishlistBook);
-      // Animate it
-      btn.style.transform = 'scale(1.2)';
-      setTimeout(() => btn.style.transform = 'scale(1)', 200);
+      return;
+    }
 
-      if (window.toggleWishlist) {
-        window.toggleWishlist(bid);
-      } else {
-        showNotification('Wishlist coming soon!', 'info');
-      }
-    } else if (e.target.matches('[data-quick-view]')) {
+    // 6. Lightbox
+    const lbImg = e.target.closest('[data-lightbox-idx]');
+    if (lbImg) {
       e.stopPropagation();
-      showQuickView(id);
-    } else {
-      addToCart(id, fmt);
+      const src = lbImg.getAttribute('src');
+      if (src) openLightbox(src);
+      return;
     }
   }
 
-  // Delegate book card buttons
-  document.getElementById('books-container').addEventListener('click', e => handleBookContainerClick(e, 'books'));
-  document.getElementById('ebooks-container').addEventListener('click', e => handleBookContainerClick(e, 'ebooks'));
+  // Delegate across ALL book containers
+  ['books-container', 'bestsellers-container', 'new-arrivals-container', 'ebooks-container'].forEach(containerId => {
+    const container = document.getElementById(containerId);
+    if (container) {
+      container.addEventListener('click', handleBookContainerClick);
+    }
+  });
 
   // Trending container clicks
-  document.getElementById('trending-container').addEventListener('click', e => {
-    const btn = e.target.closest('[data-add-trending]');
-    if (btn) { e.stopPropagation(); addToCart(Number(btn.dataset.addTrending)); return; }
-    const card = e.target.closest('.trending-card');
-    if (card) addToCart(Number(card.getAttribute('data-id')));
-  });
+  const trendingCont = document.getElementById('trending-container');
+  if (trendingCont) {
+    trendingCont.addEventListener('click', e => {
+      const qvBtn = e.target.closest('[data-quick-view]');
+      if (qvBtn) {
+        e.stopPropagation();
+        const card = qvBtn.closest('.trending-card');
+        const id = card ? Number(card.getAttribute('data-id')) : Number(qvBtn.dataset.id);
+        if (id) showQuickView(id, qvBtn);
+        return;
+      }
+      const btn = e.target.closest('[data-add-trending]');
+      if (btn) {
+        e.stopPropagation();
+        addToCart(Number(btn.dataset.addTrending), 'physical', 1);
+        return;
+      }
+      const card = e.target.closest('.trending-card');
+      if (card && (e.target.matches('button') || e.target.closest('button'))) {
+        addToCart(Number(card.getAttribute('data-id')), 'physical', 1);
+      }
+    });
+  }
 
   // Buttons in header
-  document.getElementById('browse-btn').addEventListener('click', () => {
-    document.getElementById('books').scrollIntoView({ behavior: 'smooth' });
+  const browseBtn = document.getElementById('browse-btn');
+  if (browseBtn) browseBtn.addEventListener('click', () => {
+    const target = document.getElementById('books');
+    if (target) target.scrollIntoView({ behavior: 'smooth' });
   });
-  document.getElementById('login-btn').addEventListener('click', openLogin);
-  document.getElementById('cart-btn').addEventListener('click', openCart);
-  document.getElementById('checkout-btn').addEventListener('click', checkout);
-  document.getElementById('user-avatar').addEventListener('click', toggleUserMenu);
-  document.getElementById('logout-btn').addEventListener('click', (e) => { e.preventDefault(); (window.handleLogout || handleLogout)(); });
 
-  // Close menus/modals on backdrop or outside
+  const loginBtn = document.getElementById('login-btn');
+  if (loginBtn) loginBtn.addEventListener('click', (e) => { e.preventDefault(); openLogin('login', loginBtn); });
+  const cartBtn = document.getElementById('cart-btn');
+  if (cartBtn) cartBtn.addEventListener('click', (e) => { e.preventDefault(); openCart(cartBtn); });
+  const checkoutBtn = document.getElementById('checkout-btn');
+  if (checkoutBtn) checkoutBtn.addEventListener('click', checkout);
+  const avatar = document.getElementById('user-avatar');
+  if (avatar) avatar.addEventListener('click', toggleUserMenu);
+  const logoutBtn = document.getElementById('logout-btn');
+  if (logoutBtn) logoutBtn.addEventListener('click', (e) => { e.preventDefault(); (window.handleLogout || handleLogout)(); });
+
+  // Universal Modal Click Handling: Backdrop click & Close button delegation
   document.addEventListener('click', (e) => {
-    const avatar = document.getElementById('user-avatar');
-    const menu = document.getElementById('user-menu');
-    if (menu && avatar && !avatar.contains(e.target) && !menu.contains(e.target)) menu.classList.remove('active');
+    // 1. Close user menu if clicked outside
+    const userMenu = document.getElementById('user-menu');
+    const userAvatar = document.getElementById('user-avatar');
+    if (userMenu && userAvatar && !userAvatar.contains(e.target) && !userMenu.contains(e.target)) {
+      userMenu.classList.remove('active');
+    }
+
+    // 2. Backdrop click: user clicked directly on the modal backdrop or outside content
+    if (e.target.classList.contains('modal-backdrop') || e.target.classList.contains('modal')) {
+      const activeModal = e.target.closest('.modal') || e.target;
+      if (activeModal && activeModal.id) {
+        ModalManager.close(activeModal.id);
+      }
+      return;
+    }
+
+    // 3. Close button click: any element with .close-modal or [data-close-modal]
+    const closeBtn = e.target.closest('.close-modal, [data-close-modal]');
+    if (closeBtn && !closeBtn.classList.contains('modal-backdrop')) {
+      const modal = closeBtn.closest('.modal');
+      if (modal && modal.id) {
+        e.preventDefault();
+        e.stopPropagation();
+        ModalManager.close(modal.id);
+      }
+    }
   });
-  document.querySelectorAll('[data-close-modal]').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      const modal = e.target.closest('.modal');
-      if (!modal) return;
-      if (modal.id === 'login-modal') closeLogin();
-      else if (modal.id === 'cart-modal') closeCart();
-    });
-  });
-  document.getElementById('cart-modal').addEventListener('click', (e) => { if (e.target.id === 'cart-modal') closeCart(); });
-  document.getElementById('login-modal').addEventListener('click', (e) => { if (e.target.id === 'login-modal') closeLogin(); });
 
   // Auth form events
-  document.getElementById('login-form').addEventListener('submit', handleLogin);
-  document.getElementById('signup-form').addEventListener('submit', handleSignup);
+  const loginForm = document.getElementById('login-form');
+  if (loginForm) loginForm.addEventListener('submit', handleLogin);
+  const signupForm = document.getElementById('signup-form');
+  if (signupForm) signupForm.addEventListener('submit', handleSignup);
+
   const googleLoginBtn = document.getElementById('google-login');
   if (googleLoginBtn) googleLoginBtn.addEventListener('click', handleGoogleAuth);
   const googleSignupBtn = document.getElementById('google-signup');
   if (googleSignupBtn) googleSignupBtn.addEventListener('click', handleGoogleAuth);
-  document.getElementById('to-signup').addEventListener('click', (e) => { e.preventDefault(); switchAuthTab('signup'); });
-  document.getElementById('to-login').addEventListener('click', (e) => { e.preventDefault(); switchAuthTab('login'); });
-  document.getElementById('forgot-link').addEventListener('click', (e) => { e.preventDefault(); showNotification('Password reset link sent to your email 📧', 'info'); });
 
-  // Review modal close
-  document.getElementById('review-close-btn').addEventListener('click', closeReviewModal);
-  document.getElementById('review-modal').addEventListener('click', (e) => { if (e.target.id === 'review-modal') closeReviewModal(); });
-
-  // Payment modal close
-  document.getElementById('payment-close-btn').addEventListener('click', closePaymentModal);
-  document.getElementById('payment-modal').addEventListener('click', (e) => { if (e.target.id === 'payment-modal') closePaymentModal(); });
-
-  // Orders modal
-  document.getElementById('orders-close-btn').addEventListener('click', closeOrdersModal);
-  document.getElementById('orders-modal').addEventListener('click', (e) => { if (e.target.id === 'orders-modal') closeOrdersModal(); });
-
-  // Tracking modal
-  document.getElementById('tracking-close-btn').addEventListener('click', closeTrackingModal);
-  document.getElementById('tracking-modal').addEventListener('click', (e) => { if (e.target.id === 'tracking-modal') closeTrackingModal(); });
-
-  // Refund modal
-  document.getElementById('refund-close-btn').addEventListener('click', closeRefundModal);
-  document.getElementById('refund-modal').addEventListener('click', (e) => { if (e.target.id === 'refund-modal') closeRefundModal(); });
+  const toSignup = document.getElementById('to-signup');
+  if (toSignup) toSignup.addEventListener('click', (e) => { e.preventDefault(); switchAuthTab('signup'); });
+  const toLogin = document.getElementById('to-login');
+  if (toLogin) toLogin.addEventListener('click', (e) => { e.preventDefault(); switchAuthTab('login'); });
+  const forgotLink = document.getElementById('forgot-link');
+  if (forgotLink) forgotLink.addEventListener('click', (e) => { e.preventDefault(); showNotification('Password reset link sent to your email 📧', 'info'); });
 
   // ---- Settings Modal ----
-  function openSettingsModal() {
-    if (!currentUser) return openLogin();
+  function openSettingsModal(triggerEl) {
+    if (!currentUser) return openLogin(triggerEl);
     const modal = document.getElementById('settings-modal');
     if (!modal) return;
 
@@ -2277,14 +2575,11 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('settings-phone').value = currentUser.phone || '';
     document.getElementById('settings-address').value = currentUser.address || '';
 
-    modal.classList.add('active');
-    document.body.style.overflow = 'hidden';
+    ModalManager.open('settings-modal', triggerEl);
   }
 
   function closeSettingsModal() {
-    const modal = document.getElementById('settings-modal');
-    if (modal) modal.classList.remove('active');
-    document.body.style.overflow = '';
+    ModalManager.close('settings-modal');
   }
 
   function handleSettingsSave(e) {
@@ -2329,20 +2624,17 @@ document.addEventListener('DOMContentLoaded', () => {
     body.innerHTML = html;
   };
 
-  function openWishlistModal() {
-    if (!currentUser) return openLogin();
+  function openWishlistModal(triggerEl) {
+    if (!currentUser) return openLogin(triggerEl);
     const modal = document.getElementById('wishlist-modal');
     if (!modal) return;
 
     if (window.renderWishlistItems) window.renderWishlistItems();
-    modal.classList.add('active');
-    document.body.style.overflow = 'hidden';
+    ModalManager.open('wishlist-modal', triggerEl);
   }
 
   function closeWishlistModal() {
-    const modal = document.getElementById('wishlist-modal');
-    if (modal) modal.classList.remove('active');
-    document.body.style.overflow = '';
+    ModalManager.close('wishlist-modal');
   }
 
   // Wire user-menu items
@@ -2431,18 +2723,11 @@ document.addEventListener('DOMContentLoaded', () => {
   // 4. Escape key listener for all modals
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
-      const activeModal = document.querySelector('.modal.active');
-      if (activeModal) {
-        if (activeModal.id === 'quick-view-modal') closeQuickView();
-        else if (activeModal.id === 'settings-modal') { if(typeof closeSettingsModal === 'function') closeSettingsModal(); }
-        else if (activeModal.id === 'wishlist-modal') { if(typeof closeWishlistModal === 'function') closeWishlistModal(); }
-        else if (activeModal.id === 'profile-modal') { if(typeof closeProfileModal === 'function') closeProfileModal(); }
-        else if (activeModal.id === 'payment-modal') { if(typeof closePaymentModal === 'function') closePaymentModal(); }
-      }
+      ModalManager.closeAll();
       
       const lightbox = document.getElementById('lightbox');
       if (lightbox && lightbox.classList.contains('active')) {
-        if(typeof closeLightbox === 'function') closeLightbox();
+        if (typeof closeLightbox === 'function') closeLightbox();
       }
     }
   });
@@ -2459,38 +2744,43 @@ const QV_DESCRIPTIONS = {
   'Business': 'Essential reading for entrepreneurs, leaders, and professionals. Packed with frameworks, case studies, and hard-won wisdom, this book will transform the way you think about business and success.',
 };
 
+let _qvBook = null;
 let _qvFmt = 'physical';
+let _qvQty = 1;
 
-function showQuickView(bookId) {
-  const book = books.find(b => b.id === bookId);
+function showQuickView(bookId, triggerEl) {
+  const allBooks = window.books || books;
+  const book = allBooks.find(b => b.id == bookId);
   if (!book) return;
+  _qvBook = book;
   _qvFmt = 'physical';
+  _qvQty = 1;
 
   const desc = QV_DESCRIPTIONS[book.category] || QV_DESCRIPTIONS['Classics'];
-  const starsFull = Math.round(book.rating);
+  const starsFull = Math.round(book.rating || 5);
   const starsEmpty = 5 - starsFull;
   let starsHtml = '';
   for(let i=0; i<starsFull; i++) starsHtml += '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>';
   for(let i=0; i<starsEmpty; i++) starsHtml += '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>';
 
-  const ebookPrice = Math.round(book.price * 0.6);
+  const ebookPrice = Math.round((book.price || 499) * 0.6);
   const reviewsDB_count = (reviewsDB[book.id] || []).length;
-  const totalReviews = (book.reviews + reviewsDB_count).toLocaleString();
+  const totalReviews = ((book.reviews || 120) + reviewsDB_count).toLocaleString();
 
   const formatRow = book.ebook ? `
     <div class="qv-format-toggles">
-      <button class="qv-fmt-toggle selected" id="qv-fmt-physical" onclick="selectQVFormat('physical',${book.price},${ebookPrice})">
+      <button type="button" class="qv-fmt-toggle selected" id="qv-fmt-physical" onclick="selectQVFormat('physical',${book.price},${ebookPrice})">
         <span class="qv-fmt-name">Physical</span>
         <span class="qv-fmt-price">₹${book.price}</span>
       </button>
-      <button class="qv-fmt-toggle" id="qv-fmt-ebook" onclick="selectQVFormat('ebook',${book.price},${ebookPrice})">
+      <button type="button" class="qv-fmt-toggle" id="qv-fmt-ebook" onclick="selectQVFormat('ebook',${book.price},${ebookPrice})">
         <span class="qv-fmt-name">eBook</span>
         <span class="qv-fmt-price">₹${ebookPrice}</span>
       </button>
     </div>
   ` : `
     <div class="qv-format-toggles single-format">
-      <button class="qv-fmt-toggle selected" id="qv-fmt-physical" onclick="selectQVFormat('physical',${book.price},${ebookPrice})">
+      <button type="button" class="qv-fmt-toggle selected" id="qv-fmt-physical" onclick="selectQVFormat('physical',${book.price},${ebookPrice})">
         <span class="qv-fmt-name">Physical Only</span>
         <span class="qv-fmt-price">₹${book.price}</span>
       </button>
@@ -2519,12 +2809,12 @@ function showQuickView(bookId) {
           ${book.ebook ? '<span class="qv-badge">eBook</span>' : ''}
         </div>
         
-        <h2 class="qv-title">${escHtml(book.title)}</h2>
+        <h2 class="qv-title" id="qv-title">${escHtml(book.title)}</h2>
         <div class="qv-author">by ${escHtml(book.author)}</div>
         
         <div class="qv-rating-row" aria-label="${book.rating} out of 5 stars">
           <span class="qv-stars">${starsHtml}</span>
-          <span class="qv-rating-num">${book.rating}</span>
+          <span class="qv-rating-num">${book.rating || 4.8}</span>
           <span class="qv-reviews">${totalReviews} reviews</span>
         </div>
         
@@ -2550,12 +2840,21 @@ function showQuickView(bookId) {
           <h3 class="qv-section-title">PURCHASE OPTIONS</h3>
           ${formatRow}
           
+          <div class="qv-qty-row">
+            <label for="qv-qty-input" class="qv-qty-label">Quantity</label>
+            <div class="qv-qty-controls">
+              <button type="button" class="qv-qty-btn" id="qv-qty-dec" onclick="changeQVQuantity(-1)" aria-label="Decrease quantity">−</button>
+              <input type="number" id="qv-qty-input" class="qv-qty-input" value="1" min="1" max="99" readonly />
+              <button type="button" class="qv-qty-btn" id="qv-qty-inc" onclick="changeQVQuantity(1)" aria-label="Increase quantity">+</button>
+            </div>
+          </div>
+
           <div class="qv-cta-row">
             <button class="btn btn-editorial-primary qv-add-cart-btn" id="qv-add-btn" onclick="qvAddToCart(${book.id})">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 8px;">
                 <circle cx="9" cy="21" r="1"></circle><circle cx="20" cy="21" r="1"></circle><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>
               </svg>
-              ADD TO CART
+              ADD TO BAG
             </button>
           </div>
         </div>
@@ -2563,12 +2862,17 @@ function showQuickView(bookId) {
     </div>
   `;
 
-  const modal = document.getElementById('quick-view-modal');
-  if (modal) { 
-    modal.classList.add('active'); 
-    modal.setAttribute('aria-hidden', 'false');
-    document.body.style.overflow = 'hidden'; 
-  }
+  ModalManager.open('quick-view-modal', triggerEl);
+}
+
+function changeQVQuantity(delta) {
+  const input = document.getElementById('qv-qty-input');
+  if (!input) return;
+  let val = (parseInt(input.value, 10) || 1) + delta;
+  if (val < 1) val = 1;
+  if (val > 99) val = 99;
+  input.value = val;
+  _qvQty = val;
 }
 
 function selectQVFormat(fmt, physPrice, ebookPrice) {
@@ -2580,26 +2884,32 @@ function selectQVFormat(fmt, physPrice, ebookPrice) {
 }
 
 function qvAddToCart(bookId) {
-  addToCart(bookId, _qvFmt);
+  const id = bookId || (_qvBook && _qvBook.id);
+  if (!id) return;
+  const qtyInput = document.getElementById('qv-qty-input');
+  const qty = qtyInput ? (parseInt(qtyInput.value, 10) || 1) : (_qvQty || 1);
+  addToCart(id, _qvFmt, qty);
   const btn = document.getElementById('qv-add-btn');
   if (btn) {
-    btn.innerHTML = '✓ ADDED TO CART';
+    btn.innerHTML = '✓ ADDED TO BAG';
     btn.classList.add('added');
     setTimeout(() => {
-      btn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 8px;"><circle cx="9" cy="21" r="1"></circle><circle cx="20" cy="21" r="1"></circle><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path></svg> ADD TO CART';
+      btn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 8px;"><circle cx="9" cy="21" r="1"></circle><circle cx="20" cy="21" r="1"></circle><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path></svg> ADD TO BAG';
       btn.classList.remove('added');
     }, 2000);
   }
 }
 
 function closeQuickView() {
-  const modal = document.getElementById('quick-view-modal');
-  if (modal) { 
-    modal.classList.remove('active'); 
-    modal.setAttribute('aria-hidden', 'true');
-    document.body.style.overflow = '';
-  }
+  ModalManager.close('quick-view-modal');
 }
+
+window.showQuickView = showQuickView;
+window.openQuickView = showQuickView;
+window.closeQuickView = closeQuickView;
+window.selectQVFormat = selectQVFormat;
+window.changeQVQuantity = changeQVQuantity;
+window.qvAddToCart = qvAddToCart;
 
 // ---- Scroll-reveal (IntersectionObserver) ----
 function observeBookCards() {

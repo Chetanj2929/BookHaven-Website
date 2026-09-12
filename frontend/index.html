@@ -159,7 +159,7 @@
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
               <span>Preferences</span>
             </a>
-            <a href="http://127.0.0.1:8000/admin/" class="user-menu-item" id="admin-panel-link" style="display: none;" target="_blank">
+            <a href="/admin/" class="user-menu-item" id="admin-panel-link" style="display: none;" target="_blank">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"></path></svg>
               <span>Admin Console</span>
             </a>
@@ -655,10 +655,10 @@
   <!-- =====================================================================
        EDITORIAL SPLIT AUTHENTICATION MODAL (Part 21)
        ===================================================================== -->
-  <div class="modal auth-modal-editorial" id="login-modal" aria-hidden="true">
+  <div class="modal auth-modal-editorial" id="login-modal" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="auth-title">
     <div class="modal-backdrop" data-close-modal></div>
     <div class="modal-content auth-modal-content">
-      <button class="close-modal" data-close-modal aria-label="Close dialog">&times;</button>
+      <button class="close-modal" id="login-close-btn" data-close-modal aria-label="Close dialog">&times;</button>
       
       <div class="auth-split-grid">
         <!-- Editorial Visual Side -->
@@ -683,22 +683,25 @@
             <div class="section-kicker">PATRON ACCESS</div>
             <h2 class="modal-title" id="auth-title">Welcome to BookHaven</h2>
             <p class="modal-subtitle">Sign in to manage your reading wishlist, order tracking, and library.</p>
+            <div class="form-error-msg general-error" id="error-auth-general" style="display:none;"></div>
           </div>
 
           <!-- Sign In Form -->
-          <form class="auth-form" id="login-form">
+          <form class="auth-form" id="login-form" novalidate>
             <div class="form-group">
               <label class="form-label" for="login-email">Email Address</label>
-              <input type="email" class="form-input" id="login-email" placeholder="name@example.com" required />
+              <input type="email" class="form-input" id="login-email" placeholder="name@example.com" autocomplete="email" required />
+              <div class="form-error-msg" id="error-login-email"></div>
             </div>
             <div class="form-group">
               <div class="form-label-split">
                 <label class="form-label" for="login-password">Password</label>
                 <a href="#" id="forgot-link" class="forgot-link">Forgot password?</a>
               </div>
-              <input type="password" class="form-input" id="login-password" placeholder="••••••••" required />
+              <input type="password" class="form-input" id="login-password" placeholder="••••••••" autocomplete="current-password" required />
+              <div class="form-error-msg" id="error-login-password"></div>
             </div>
-            <button type="submit" class="btn btn-editorial-primary btn-full">Sign In to Library</button>
+            <button type="submit" class="btn btn-editorial-primary btn-full" id="login-submit-btn">Sign In to Library</button>
             <div class="divider"><span>or continue with</span></div>
             <div id="google-login-container" style="display:flex;justify-content:center;margin-top:0.5rem;"></div>
             <div class="create-account-link">
@@ -708,24 +711,28 @@
           </form>
 
           <!-- Signup Form -->
-          <form class="auth-form" id="signup-form" style="display:none;">
+          <form class="auth-form" id="signup-form" style="display:none;" novalidate>
             <div class="form-group">
               <label class="form-label" for="signup-name">Full Name</label>
-              <input type="text" class="form-input" id="signup-name" placeholder="Jane Reader" required />
+              <input type="text" class="form-input" id="signup-name" placeholder="Jane Reader" autocomplete="name" required />
+              <div class="form-error-msg" id="error-signup-name"></div>
             </div>
             <div class="form-group">
               <label class="form-label" for="signup-email">Email Address</label>
-              <input type="email" class="form-input" id="signup-email" placeholder="you@example.com" required />
+              <input type="email" class="form-input" id="signup-email" placeholder="you@example.com" autocomplete="email" required />
+              <div class="form-error-msg" id="error-signup-email"></div>
             </div>
             <div class="form-group">
               <label class="form-label" for="signup-password">Password</label>
-              <input type="password" class="form-input" id="signup-password" placeholder="Minimum 8 characters" minlength="8" required />
+              <input type="password" class="form-input" id="signup-password" placeholder="Minimum 8 characters" autocomplete="new-password" minlength="8" required />
+              <div class="form-error-msg" id="error-signup-password"></div>
             </div>
             <div class="form-group">
               <label class="form-label" for="signup-confirm">Confirm Password</label>
-              <input type="password" class="form-input" id="signup-confirm" placeholder="Re-enter password" required />
+              <input type="password" class="form-input" id="signup-confirm" placeholder="Re-enter password" autocomplete="new-password" required />
+              <div class="form-error-msg" id="error-signup-confirm"></div>
             </div>
-            <button type="submit" class="btn btn-editorial-primary btn-full">Create Account</button>
+            <button type="submit" class="btn btn-editorial-primary btn-full" id="signup-submit-btn">Create Account</button>
             <div class="divider"><span>or sign up with</span></div>
             <div id="google-signup-container" style="display:flex;justify-content:center;margin-top:0.5rem;"></div>
             <div class="create-account-link">
@@ -831,10 +838,10 @@
   </div>
 
   <!-- Quick View Modal -->
-  <div class="modal" id="quick-view-modal" aria-hidden="true">
+  <div class="modal" id="quick-view-modal" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="qv-title">
     <div class="modal-backdrop" data-close-modal></div>
     <div class="modal-content quick-view-modal-content">
-      <button class="close-modal" id="quick-view-close-btn">&times;</button>
+      <button class="close-modal" id="quick-view-close-btn" data-close-modal aria-label="Close Quick View dialog">&times;</button>
       <div id="quick-view-body"></div>
     </div>
   </div>

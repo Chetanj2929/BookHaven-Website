@@ -12,7 +12,11 @@
   'use strict';
 
   // ─── Config ─────────────────────────────────────────────────────────────────
-  const API_BASE = window.BOOKHAVEN_API_URL || 'http://127.0.0.1:8001/api';
+  const API_BASE = (window.BOOKHAVEN_API_URL || (
+    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+      ? 'http://127.0.0.1:8000/api'
+      : '/api'
+  )).replace(/\/+$/, '');
   const CLERK_PUBLISHABLE_KEY = 'pk_test_cmVhZHktc3RhZy0xMDIzLmNsZXJrLmFjY291bnRzLmRldiQ';
   window.wishlist = [];
 
@@ -70,51 +74,36 @@
    */
   async function initClerkAuth() {
     const clerk = window.Clerk; // v5: instance lives on window.Clerk
+    if (!clerk) return;
 
-    // 1. Wire the Login button → Clerk sign-in modal
-    const loginBtn = document.getElementById('login-btn');
-    if (loginBtn) {
-      loginBtn.addEventListener('click', (e) => {
+    // Optional: wire Google buttons to Clerk OAuth if available
+    const googleLoginBtn = document.getElementById('google-login');
+    if (googleLoginBtn) {
+      googleLoginBtn.addEventListener('click', (e) => {
         e.preventDefault();
-        e.stopPropagation();
         clerk.openSignIn();
       });
     }
-
-    // 2. Intercept any attempt to show the old custom modal → redirect to Clerk
-    const oldLoginModal = document.getElementById('login-modal');
-    if (oldLoginModal) {
-      const observer = new MutationObserver(() => {
-        if (oldLoginModal.classList.contains('active') || oldLoginModal.getAttribute('aria-hidden') === 'false') {
-          oldLoginModal.classList.remove('active');
-          oldLoginModal.setAttribute('aria-hidden', 'true');
-          document.body.style.overflow = '';
-          clerk.openSignIn();
-        }
+    const googleSignupBtn = document.getElementById('google-signup');
+    if (googleSignupBtn) {
+      googleSignupBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        clerk.openSignUp();
       });
-      observer.observe(oldLoginModal, { attributes: true, attributeFilter: ['class', 'aria-hidden'] });
     }
 
-    // 3. Listen for Clerk auth state changes (v5 API: window.Clerk.addListener)
+    // Listen for Clerk auth state changes (v5 API: window.Clerk.addListener)
     if (typeof clerk.addListener === 'function') {
       clerk.addListener(async ({ user }) => {
         if (user) {
           await onClerkSignIn(user);
-        } else {
-          onClerkSignOut();
         }
       });
     }
 
-    // 4. If there is already an active session on page load, sync to Django now
+    // If there is already an active session in Clerk on page load, sync to Django now
     if (clerk.user) {
       await onClerkSignIn(clerk.user);
-    } else {
-      // No Clerk session — clear any stale legacy tokens (pre-Clerk Google OAuth sessions)
-      clearTokens();
-      localStorage.removeItem('currentUser');
-      currentUser = null;
-      if (typeof updateUIForLoggedOutUser === 'function') updateUIForLoggedOutUser();
     }
   }
 
@@ -262,10 +251,7 @@
     tryInit();
   })();
 
-  // Shim old form handlers to open Clerk's modal instead
-  window.handleLogin = function (e) { if (e) e.preventDefault(); if (window.Clerk) window.Clerk.openSignIn(); };
-  window.handleSignup = function (e) { if (e) e.preventDefault(); if (window.Clerk) window.Clerk.openSignUp(); };
-
+  // Clerk auth callbacks
   /** Called when Clerk reports a signed-out state. */
   function onClerkSignOut() {
     clearTokens();
@@ -469,26 +455,33 @@
   }
 
   // Override: addToCart
-  window.addToCart = async function (bookId, format = 'physical') {
+  window.addToCart = async function (bookId, format = 'physical', quantity = 1) {
+    const qty = Math.max(1, parseInt(quantity, 10) || 1);
     if (!currentUser || !getToken()) {
       // Not logged in — fall back to script.js local cart behavior
-      // Find book in window.books and add to the local cart array directly
-      const book = (window.books || []).find(b => b.id === bookId);
+      const allBooks = window.books || (typeof books !== 'undefined' ? books : []);
+      const book = allBooks.find(b => b.id == bookId);
       if (!book) return;
-      const existing = cart.find(c => c.id === bookId && c.format === format);
+      const existing = cart.find(c => c.id == bookId && c.format === format);
       if (existing) {
-        existing.quantity = (existing.quantity || 1) + 1;
+        existing.quantity = (existing.quantity || 1) + qty;
       } else {
-        cart.push({ id: book.id, title: book.title, author: book.author,
-          price: format === 'ebook' ? Math.round(book.price * 0.6) : book.price,
-          format, quantity: 1 });
+        cart.push({
+          id: book.id,
+          title: book.title,
+          author: book.author,
+          price: format === 'ebook' ? Math.round((book.price || 499) * 0.6) : (book.price || 499),
+          format,
+          quantity: qty
+        });
       }
+      localStorage.setItem('bookCart', JSON.stringify(cart));
       updateCartCount();
-      showNotification(`${book.title} added to cart! 🛒`, 'success');
+      showNotification(`${book.title} added to bag! 🛒`, 'success');
       return;
     }
     // Logged in — sync with server
-    const { ok, data } = await apiRequest('POST', '/orders/cart/add/', { book_id: bookId, format, quantity: 1 }, true);
+    const { ok, data } = await apiRequest('POST', '/orders/cart/add/', { book_id: bookId, format, quantity: qty }, true);
     if (ok) {
       cart = (data.items || []).map(item => ({
         _cartItemId: item.id,
@@ -499,9 +492,10 @@
         format: item.format,
         quantity: item.quantity,
       }));
+      localStorage.setItem('bookCart', JSON.stringify(cart));
       updateCartCount();
-      const bookName = cart.find(c => c.id === bookId)?.title || 'Book';
-      showNotification(`${bookName} added to cart! 🛒`, 'success');
+      const bookName = cart.find(c => c.id == bookId)?.title || 'Book';
+      showNotification(`${bookName} added to bag! 🛒`, 'success');
     } else {
       showNotification(extractError(data), 'error');
     }
@@ -510,22 +504,23 @@
   // Intercept clicks before script.js's delegated or direct listeners
   document.addEventListener('click', (e) => {
     // 1. Intercept Add to Cart
-    if (e.target.matches('[data-add-to-cart]')) {
-      e.stopPropagation(); // Prevent script.js from handling this click
-      const card = e.target.closest('.book-card');
+    const addBtn = e.target.closest('[data-add-to-cart]');
+    if (addBtn) {
+      e.stopPropagation(); // Prevent duplicate handling
+      const card = addBtn.closest('.book-card');
       if (!card) return;
       const id = Number(card.getAttribute('data-id'));
       
       const selectedFmtBtn = card.querySelector('.format-btn.selected');
       const fmt = selectedFmtBtn ? selectedFmtBtn.dataset.fmt : 'physical';
       
-      window.addToCart(id, fmt);
+      window.addToCart(id, fmt, 1);
       
       // Re-trigger the pulsing animation from script.js
-      e.target.classList.remove('pulsing');
-      void e.target.offsetWidth;
-      e.target.classList.add('pulsing');
-      e.target.addEventListener('animationend', () => e.target.classList.remove('pulsing'), { once: true });
+      addBtn.classList.remove('pulsing');
+      void addBtn.offsetWidth;
+      addBtn.classList.add('pulsing');
+      addBtn.addEventListener('animationend', () => addBtn.classList.remove('pulsing'), { once: true });
     }
     // 2. Intercept Logout
     else if (e.target.closest('#logout-btn') || e.target.closest('.logout')) {
@@ -791,27 +786,31 @@
   function attachCardEvents(container) {
     // Quick-view buttons
     container.querySelectorAll('[data-quick-view]').forEach(btn => {
-      const card = btn.closest('.book-card');
-      if (!card) return;
-      const bookId = parseInt(card.dataset.id);
-      btn.addEventListener('click', () => {
-        if (window.openQuickView) window.openQuickView(bookId);
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const card = btn.closest('.book-card');
+        if (!card) return;
+        const bookId = parseInt(card.dataset.id, 10);
+        if (window.showQuickView) window.showQuickView(bookId, btn);
+        else if (window.openQuickView) window.openQuickView(bookId, btn);
       });
     });
     // Add to cart buttons
     container.querySelectorAll('[data-add-to-cart]').forEach(btn => {
-      const card = btn.closest('.book-card');
-      if (!card) return;
-      const bookId = parseInt(card.dataset.id);
-      btn.addEventListener('click', () => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const card = btn.closest('.book-card');
+        if (!card) return;
+        const bookId = parseInt(card.dataset.id, 10);
         const fmtBtn = card.querySelector('.format-btn.selected');
         const fmt = fmtBtn ? fmtBtn.dataset.fmt : 'physical';
-        window.addToCart(bookId, fmt);
+        window.addToCart(bookId, fmt, 1);
       });
     });
     // Format toggle buttons
     container.querySelectorAll('.format-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
         const card = btn.closest('.book-card');
         if (!card) return;
         card.querySelectorAll('.format-btn').forEach(b => b.classList.remove('selected'));
@@ -820,9 +819,10 @@
     });
     // See-all-reviews buttons
     container.querySelectorAll('[data-see-reviews]').forEach(btn => {
-      const bookId = parseInt(btn.dataset.seeReviews);
-      btn.addEventListener('click', () => {
-        if (window.openReviewModal) window.openReviewModal(bookId);
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const bookId = parseInt(btn.dataset.seeReviews, 10);
+        if (window.openReviewModal) window.openReviewModal(bookId, btn);
       });
     });
   }
