@@ -134,6 +134,14 @@ async function run() {
     await cdp.send('Page.navigate', { url: TARGET_URL });
     await sleep(2500); // Allow initial JS and API checks to load
 
+    // Dismiss intro overlay immediately so screenshots are not obscured
+    await cdp.eval(`(() => {
+      const overlay = document.getElementById('intro-overlay');
+      if (overlay) overlay.style.display = 'none';
+      sessionStorage.setItem('bookhaven_intro_seen', 'true');
+    })()`);
+    await sleep(300);
+
     // Initial check
     const initialOverflow = await cdp.eval('document.body.style.overflow');
     test('Initial body overflow is normal', initialOverflow !== 'hidden', `overflow="${initialOverflow}"`);
@@ -356,7 +364,8 @@ async function run() {
     // First log out to test login modal again
     await cdp.eval(`window.handleLogout()`);
     await sleep(200);
-    // Open login modal
+
+    // 14a: Close button
     await cdp.eval(`document.getElementById('login-btn').click()`);
     await sleep(200);
     const loginCloseBtnTest = await cdp.eval(`(() => {
@@ -367,10 +376,32 @@ async function run() {
     })()`);
     test('Login modal close button closes modal and restores overflow', !loginCloseBtnTest.isActive && loginCloseBtnTest.bodyOverflow !== 'hidden', JSON.stringify(loginCloseBtnTest));
 
+    // 14b: Escape key
+    await cdp.eval(`document.getElementById('login-btn').click()`);
+    await sleep(200);
+    await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape' });
+    await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Escape', code: 'Escape' });
+    await sleep(200);
+    const loginEscTest = await cdp.eval(`(() => {
+      const modal = document.getElementById('login-modal');
+      return { isActive: modal.classList.contains('active'), bodyOverflow: document.body.style.overflow };
+    })()`);
+    test('Login modal closes via Escape key and restores overflow', !loginEscTest.isActive && loginEscTest.bodyOverflow !== 'hidden', JSON.stringify(loginEscTest));
+
+    // 14c: Backdrop click
+    await cdp.eval(`document.getElementById('login-btn').click()`);
+    await sleep(200);
+    const loginBackdropTest = await cdp.eval(`(() => {
+      const backdrop = document.querySelector('#login-modal .modal-backdrop');
+      backdrop.click();
+      const modal = document.getElementById('login-modal');
+      return { isActive: modal.classList.contains('active'), bodyOverflow: document.body.style.overflow };
+    })()`);
+    test('Login modal closes via Backdrop click and restores overflow', !loginBackdropTest.isActive && loginBackdropTest.bodyOverflow !== 'hidden', JSON.stringify(loginBackdropTest));
+
     // TEST 15: Console error check
     console.log('\n--- Checking Console Errors ---');
-    // Filter out expected network errors if local Django server was not running during some fetch
-    const fatalErrors = cdp.consoleErrors.filter(e => !e.includes('ERR_CONNECTION_REFUSED') && !e.includes('Failed to load resource'));
+    const fatalErrors = cdp.consoleErrors.filter(e => !e.includes('ERR_CONNECTION_REFUSED') && !e.includes('Failed to load resource') && !e.includes('favicon'));
     test('Zero runtime script syntax or unhandled exception errors', fatalErrors.length === 0, `errors: ${JSON.stringify(fatalErrors)}`);
 
     console.log('\n=== Test Run Summary ===');

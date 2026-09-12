@@ -170,11 +170,8 @@
     }
   }
 
-  // Override: handleLogout — Clerk-powered sign-out
+  // Override: handleLogout — sign-out
   window.handleLogout = async function () {
-    const confirmed = confirm('Are you sure you want to logout?');
-    if (!confirmed) return;
-
     try {
       // Blacklist the simplejwt refresh token on the Django side (best-effort)
       const refresh = localStorage.getItem('bh_refresh_token');
@@ -183,15 +180,17 @@
       }
     } catch (_) { /* ignore */ }
 
-    // Sign out from Clerk — triggers the addListener callback above
-    if (window.Clerk) {
-      await window.Clerk.signOut();
-    } else {
-      clearTokens();
-      localStorage.removeItem('currentUser');
-      showNotification('Logged out successfully! 👋', 'success');
-      setTimeout(() => window.location.reload(), 800);
+    clearTokens();
+    localStorage.removeItem('currentUser');
+    currentUser = null;
+    if (typeof updateUIForLoggedOutUser === 'function') updateUIForLoggedOutUser();
+
+    // Sign out from Clerk if present
+    if (window.Clerk && typeof window.Clerk.signOut === 'function') {
+      try { await window.Clerk.signOut(); } catch (_) {}
     }
+
+    showNotification('Logged out successfully! 👋', 'success');
   };
 
   // ─── Boot Clerk ──────────────────────────────────────────────────────────────
