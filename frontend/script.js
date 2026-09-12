@@ -2549,12 +2549,37 @@ function saveProfile() {
 function openLightbox(src) {
   const lb = document.getElementById('lightbox');
   const img = document.getElementById('lightbox-img');
-  if (lb && img) { img.src = src; lb.classList.add('active'); }
+  if (lb && img && src) {
+    img.src = src;
+    img.style.display = 'block';
+    lb.style.display = 'flex';
+    requestAnimationFrame(() => lb.classList.add('active'));
+    document.body.style.overflow = 'hidden';
+  }
 }
 function closeLightbox() {
   const lb = document.getElementById('lightbox');
-  if (lb) lb.classList.remove('active');
+  const img = document.getElementById('lightbox-img');
+  if (lb) {
+    lb.classList.remove('active');
+    setTimeout(() => {
+      lb.style.display = 'none';
+      if (img) {
+        img.removeAttribute('src');
+        img.style.display = 'none';
+      }
+    }, 250);
+  }
+  document.body.style.overflow = '';
 }
+
+// Global escape key listener for lightbox
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    const lb = document.getElementById('lightbox');
+    if (lb && lb.classList.contains('active')) closeLightbox();
+  }
+});
 
 // Show all reviews for a book in the review modal
 function showAllReviews(bookId) {
@@ -2584,7 +2609,7 @@ function showAllReviews(bookId) {
                 <div class="review-stars" style="margin-left:auto;font-size:1rem;">${'★'.repeat(Math.min(5, r.rating))}${'☆'.repeat(5 - Math.min(5, r.rating))}</div>
               </div>
               ${r.text ? `<div class="review-text" style="font-size:0.95rem;line-height:1.6;">${escHtml(r.text)}</div>` : ''}
-              ${r.photos && r.photos.length ? `<div class="review-photos">${r.photos.map(p => `<img class="review-photo-thumb" src="${escHtml(p)}" alt="Review photo" data-lb-src="${escHtml(p)}" />`).join('')}</div>` : ''}
+              ${r.photos && r.photos.length ? `<div class="review-photos">${r.photos.map(p => `<img class="review-photo-thumb" src="${escHtml(p)}" alt="Review photo" data-lb-src="${escHtml(p)}" onerror="this.style.display='none'" />`).join('')}</div>` : ''}
             </div>`).join('')}
         </div>
         <button class="submit-btn" style="margin-top:1.5rem;" onclick="closeReviewModal()">Close</button>`;

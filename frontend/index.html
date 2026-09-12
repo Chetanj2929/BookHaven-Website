@@ -779,10 +779,13 @@
     </div>
   </div>
 
-  <!-- Lightbox -->
-  <div class="lightbox" id="lightbox">
-    <button class="lightbox-close" id="lightbox-close">&times;</button>
-    <img id="lightbox-img" src="" alt="Review photo" />
+  <!-- Lightbox (Photo Preview Modal) -->
+  <div class="lightbox" id="lightbox" aria-hidden="true" style="display: none;">
+    <div class="lightbox-backdrop" onclick="closeLightbox()"></div>
+    <div class="lightbox-content">
+      <button class="lightbox-close" id="lightbox-close" onclick="closeLightbox()" aria-label="Close photo preview">&times;</button>
+      <img id="lightbox-img" src="" alt="Review photo" style="display: none;" />
+    </div>
   </div>
 
   <!-- Profile Modal -->
