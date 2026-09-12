@@ -863,10 +863,12 @@ function openCart(triggerEl = null) {
     }
 
     itemsDiv.innerHTML = cart.map(item => {
+      const cId = item.cartId || `${item.id}-${item.format || 'physical'}`;
+      item.cartId = cId;
       const fallbackSvg = generateEditorialCoverSvg(item.title, item.author || 'Author', item.category || 'Books');
       const coverSrc = (item.image && item.image.trim()) ? item.image : fallbackSvg;
       return `
-      <div class="cart-item" data-cart-id="${item.cartId}">
+      <div class="cart-item" data-cart-id="${cId}">
         <div class="cart-item-thumb">
           <img src="${escHtml(coverSrc)}" alt="${escHtml(item.title)}" class="cart-item-img"
                onload="if(this.naturalWidth<=1||this.naturalHeight<=1){this.onerror=null;this.onload=null;this.src='${fallbackSvg}';}"
@@ -883,11 +885,11 @@ function openCart(triggerEl = null) {
           </div>
           <div class="cart-item-actions">
             <div class="cart-qty-ctrl">
-              <button type="button" onclick="changeCartQty('${item.cartId}', -1)" class="cart-qty-btn" aria-label="Decrease quantity">−</button>
+              <button type="button" onclick="changeCartQty('${cId}', -1)" class="cart-qty-btn" aria-label="Decrease quantity">−</button>
               <span class="cart-qty-num">${item.quantity}</span>
-              <button type="button" onclick="changeCartQty('${item.cartId}', 1)" class="cart-qty-btn" aria-label="Increase quantity">+</button>
+              <button type="button" onclick="changeCartQty('${cId}', 1)" class="cart-qty-btn" aria-label="Increase quantity">+</button>
             </div>
-            <button type="button" onclick="removeCartItem('${item.cartId}')" class="cart-remove-btn" aria-label="Remove item">
+            <button type="button" onclick="removeCartItem('${cId}')" class="cart-remove-btn" aria-label="Remove item">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
               Remove
             </button>
@@ -908,18 +910,54 @@ window.openCart = openCart;
 window.closeCart = closeCart;
 
 window.changeCartQty = function(cartId, delta) {
-  const item = cart.find(i => i.cartId === cartId);
+  const item = cart.find(i => (i.cartId && String(i.cartId) === String(cartId)) || String(i.id) === String(cartId) || `${i.id}-${i.format}` === String(cartId) || (i._cartItemId && String(i._cartItemId) === String(cartId)));
   if (!item) return;
-  item.quantity += delta;
-  if (item.quantity <= 0) {
-    cart = cart.filter(i => i.cartId !== cartId);
+  const newQty = (item.quantity || 1) + delta;
+  if (newQty <= 0) {
+    return window.removeCartItem(cartId);
   }
+  item.quantity = newQty;
+
+  // Sync to server if patron has session
+  const token = localStorage.getItem('bh_access_token');
+  if (token && item._cartItemId) {
+    fetch(`${getApiBaseUrl()}/orders/cart/update/${item._cartItemId}/`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({ quantity: item.quantity })
+    }).catch(() => {});
+  }
+
+  window.cart = cart;
+  localStorage.setItem('bookCart', JSON.stringify(cart));
   updateCartCount();
   openCart();
 };
 
 window.removeCartItem = function(cartId) {
-  cart = cart.filter(i => i.cartId !== cartId);
+  const itemIndex = cart.findIndex(i => (i.cartId && String(i.cartId) === String(cartId)) || String(i.id) === String(cartId) || `${i.id}-${i.format}` === String(cartId) || (i._cartItemId && String(i._cartItemId) === String(cartId)));
+  if (itemIndex > -1) {
+    const item = cart[itemIndex];
+    const serverItemId = item._cartItemId;
+    cart.splice(itemIndex, 1);
+
+    // Sync to server if patron has session
+    const token = localStorage.getItem('bh_access_token');
+    if (token && serverItemId) {
+      fetch(`${getApiBaseUrl()}/orders/cart/remove/${serverItemId}/`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      }).catch(() => {});
+    }
+  } else {
+    cart = cart.filter(i => (i.cartId && String(i.cartId) !== String(cartId)) && String(i.id) !== String(cartId));
+  }
+
+  window.cart = cart;
+  localStorage.setItem('bookCart', JSON.stringify(cart));
   updateCartCount();
   openCart();
   showNotification('Volume removed from your bag.');
@@ -3378,6 +3416,9 @@ function showNotification(message, type = 'success') {
   const container = document.getElementById('toast-container');
   if (!container) return;
 
+  // Clear any existing toast elements to prevent multiple stacked toasts
+  container.querySelectorAll('.toast-notification').forEach(el => el.remove());
+
   const toast = document.createElement('div');
   toast.className = 'toast-notification';
   toast.innerHTML = `
@@ -3393,7 +3434,7 @@ function showNotification(message, type = 'success') {
     toast.style.transform = 'translateY(10px)';
     toast.style.transition = 'all 0.3s ease';
     setTimeout(() => toast.remove(), 300);
-  }, 3200);
+  }, 2400);
 }
 
 // ---- 9. Wishlist Header Button ----

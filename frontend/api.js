@@ -440,40 +440,48 @@
     if (!getToken()) return;
     const { ok, data } = await apiRequest('GET', '/orders/cart/', null, true);
     if (!ok) return;
-    // Convert server cart to local cart format
+    // Convert server cart to local cart format with cartId and cover image
     cart = (data.items || []).map(item => ({
       _cartItemId: item.id,
+      cartId: `${item.book.id}-${item.format || 'physical'}`,
       id: item.book.id,
       title: item.book.title,
       author: item.book.author,
+      image: (item.book.id === 4 || (item.book.title && item.book.title.includes('Harry Potter'))) ? 'assets/harry-potter.jpg' : (item.book.image_url || ''),
       price: item.unit_price,
       format: item.format,
       quantity: item.quantity,
     }));
+    window.cart = cart;
     updateCartCount();
   }
 
   // Override: addToCart
   window.addToCart = async function (bookId, format = 'physical', quantity = 1) {
     const qty = Math.max(1, parseInt(quantity, 10) || 1);
+    const cartId = `${bookId}-${format}`;
     if (!currentUser || !getToken()) {
       // Not logged in — fall back to script.js local cart behavior
       const allBooks = window.books || (typeof books !== 'undefined' ? books : []);
       const book = allBooks.find(b => b.id == bookId);
       if (!book) return;
-      const existing = cart.find(c => c.id == bookId && c.format === format);
+      const existing = cart.find(c => c.cartId === cartId || (c.id == bookId && c.format === format));
       if (existing) {
         existing.quantity = (existing.quantity || 1) + qty;
       } else {
+        const cover = (book.id === 4 || (book.title && book.title.includes('Harry Potter'))) ? 'assets/harry-potter.jpg' : (book.image || '');
         cart.push({
+          cartId,
           id: book.id,
           title: book.title,
           author: book.author,
+          image: cover,
           price: format === 'ebook' ? Math.round((book.price || 499) * 0.6) : (book.price || 499),
           format,
           quantity: qty
         });
       }
+      window.cart = cart;
       localStorage.setItem('bookCart', JSON.stringify(cart));
       updateCartCount();
       showNotification(`${book.title} added to bag! 🛒`, 'success');
@@ -484,13 +492,16 @@
     if (ok) {
       cart = (data.items || []).map(item => ({
         _cartItemId: item.id,
+        cartId: `${item.book.id}-${item.format || 'physical'}`,
         id: item.book.id,
         title: item.book.title,
         author: item.book.author,
+        image: (item.book.id === 4 || (item.book.title && item.book.title.includes('Harry Potter'))) ? 'assets/harry-potter.jpg' : (item.book.image_url || ''),
         price: item.unit_price,
         format: item.format,
         quantity: item.quantity,
       }));
+      window.cart = cart;
       localStorage.setItem('bookCart', JSON.stringify(cart));
       updateCartCount();
       const bookName = cart.find(c => c.id == bookId)?.title || 'Book';
