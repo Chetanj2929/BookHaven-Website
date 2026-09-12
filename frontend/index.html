@@ -29,10 +29,14 @@
     src="https://ready-stag-1023.clerk.accounts.dev/npm/@clerk/clerk-js@latest/dist/clerk.browser.js"
     type="text/javascript"></script>
 
-  <!-- Global API Backend URL Configuration -->
+  <!-- Global API Backend URL & Payment Gateway Configuration -->
   <script>
     window.BOOKHAVEN_API_URL = 'https://bookhaven-website.onrender.com/api';
+    window.RAZORPAY_KEY_ID = 'rzp_test_TaeA7VnqRyVNqD';
   </script>
+
+  <!-- Razorpay Standard Checkout SDK -->
+  <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
 
   <link rel="stylesheet" href="styles.css">
 </head>
@@ -597,15 +601,15 @@
   <!-- =====================================================================
        SLIDE-OVER CART DRAWER (Part 19)
        ===================================================================== -->
-  <div class="cart-drawer-overlay" id="cart-modal" aria-hidden="true">
-    <div class="cart-drawer-backdrop" id="cart-drawer-backdrop"></div>
+  <div class="cart-drawer-overlay modal" id="cart-modal" aria-hidden="true" role="dialog" aria-modal="true">
+    <div class="cart-drawer-backdrop" id="cart-drawer-backdrop" data-close-modal onclick="closeCart()"></div>
     <div class="cart-drawer-container">
       <div class="cart-drawer-header">
         <div class="cart-header-title-wrap">
           <h2 class="cart-drawer-title">Shopping Bag</h2>
           <span class="cart-drawer-subtitle" id="cart-item-count-label">0 items</span>
         </div>
-        <button class="cart-drawer-close" data-close-modal id="cart-close-btn" aria-label="Close shopping bag">&times;</button>
+        <button class="cart-drawer-close close-modal" data-close-modal id="cart-close-btn" onclick="closeCart()" aria-label="Close shopping bag">&times;</button>
       </div>
 
       <!-- Free Shipping Meter -->
@@ -743,7 +747,7 @@
   <div class="modal" id="payment-modal" aria-hidden="true">
     <div class="modal-backdrop" data-close-modal></div>
     <div class="modal-content payment-modal-content">
-      <button class="close-modal" id="payment-close-btn">&times;</button>
+      <button class="close-modal" id="payment-close-btn" data-close-modal aria-label="Close dialog">&times;</button>
       <div id="payment-modal-body"></div>
     </div>
   </div>
@@ -752,7 +756,7 @@
   <div class="modal" id="orders-modal" aria-hidden="true">
     <div class="modal-backdrop" data-close-modal></div>
     <div class="modal-content orders-modal-content">
-      <button class="close-modal" id="orders-close-btn">&times;</button>
+      <button class="close-modal" id="orders-close-btn" data-close-modal aria-label="Close dialog">&times;</button>
       <div id="orders-modal-body"></div>
     </div>
   </div>
@@ -761,7 +765,7 @@
   <div class="modal" id="tracking-modal" aria-hidden="true">
     <div class="modal-backdrop" data-close-modal></div>
     <div class="modal-content tracking-modal-content">
-      <button class="close-modal" id="tracking-close-btn">&times;</button>
+      <button class="close-modal" id="tracking-close-btn" data-close-modal aria-label="Close dialog">&times;</button>
       <div id="tracking-modal-body"></div>
     </div>
   </div>
@@ -770,7 +774,7 @@
   <div class="modal" id="review-modal" aria-hidden="true">
     <div class="modal-backdrop" data-close-modal></div>
     <div class="modal-content review-modal-content">
-      <button class="close-modal" id="review-close-btn">&times;</button>
+      <button class="close-modal" id="review-close-btn" data-close-modal aria-label="Close dialog">&times;</button>
       <div id="review-modal-body"></div>
     </div>
   </div>

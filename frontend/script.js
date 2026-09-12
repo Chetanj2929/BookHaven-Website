@@ -306,7 +306,7 @@ const ModalManager = {
     if (this.activeModal === modal) {
       this.activeModal = null;
     }
-    const anyActive = document.querySelector('.modal.active');
+    const anyActive = document.querySelector('.modal.active, .cart-drawer-overlay.active');
     if (!anyActive) {
       document.body.style.overflow = '';
     }
@@ -317,7 +317,7 @@ const ModalManager = {
   },
 
   closeAll() {
-    document.querySelectorAll('.modal.active').forEach(m => {
+    document.querySelectorAll('.modal.active, .cart-drawer-overlay.active').forEach(m => {
       m.classList.remove('active');
       m.setAttribute('aria-hidden', 'true');
     });
@@ -862,27 +862,40 @@ function openCart(triggerEl = null) {
       meterFill.style.width = `${Math.min(100, Math.round((subtotal / 999) * 100))}%`;
     }
 
-    itemsDiv.innerHTML = cart.map(item => `
-      <div class="cart-item">
-        <img src="${item.image}" alt="${escHtml(item.title)}" class="cart-item-img" />
+    itemsDiv.innerHTML = cart.map(item => {
+      const fallbackSvg = generateEditorialCoverSvg(item.title, item.author || 'Author', item.category || 'Books');
+      const coverSrc = (item.image && item.image.trim()) ? item.image : fallbackSvg;
+      return `
+      <div class="cart-item" data-cart-id="${item.cartId}">
+        <div class="cart-item-thumb">
+          <img src="${escHtml(coverSrc)}" alt="${escHtml(item.title)}" class="cart-item-img"
+               onload="if(this.naturalWidth<=1||this.naturalHeight<=1){this.onerror=null;this.onload=null;this.src='${fallbackSvg}';}"
+               onerror="this.onerror=null;this.onload=null;this.src='${fallbackSvg}';" />
+        </div>
         <div class="cart-item-info">
           <div class="cart-item-title">${escHtml(item.title)}</div>
-          <div class="cart-item-author">${escHtml(item.author)}</div>
+          <div class="cart-item-author">by ${escHtml(item.author || 'Author')}</div>
           <div class="cart-item-meta">
-            <span class="cart-item-fmt">${item.format === 'ebook' ? '📱 eBook' : '📚 Physical'}</span>
+            <span class="cart-item-fmt ${item.format === 'ebook' ? 'badge-ebook' : 'badge-physical'}">
+              ${item.format === 'ebook' ? '📱 Instant eBook' : '📚 Physical Book'}
+            </span>
             <span class="cart-item-unit">${formatINR(item.price)} each</span>
           </div>
           <div class="cart-item-actions">
             <div class="cart-qty-ctrl">
-              <button onclick="changeCartQty('${item.cartId}', -1)" class="cart-qty-btn" aria-label="Decrease quantity">−</button>
+              <button type="button" onclick="changeCartQty('${item.cartId}', -1)" class="cart-qty-btn" aria-label="Decrease quantity">−</button>
               <span class="cart-qty-num">${item.quantity}</span>
-              <button onclick="changeCartQty('${item.cartId}', 1)" class="cart-qty-btn" aria-label="Increase quantity">+</button>
+              <button type="button" onclick="changeCartQty('${item.cartId}', 1)" class="cart-qty-btn" aria-label="Increase quantity">+</button>
             </div>
-            <button onclick="removeCartItem('${item.cartId}')" class="cart-remove-btn" aria-label="Remove item">Remove</button>
+            <button type="button" onclick="removeCartItem('${item.cartId}')" class="cart-remove-btn" aria-label="Remove item">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+              Remove
+            </button>
           </div>
         </div>
         <div class="cart-item-total">${formatINR(item.price * item.quantity)}</div>
-      </div>`).join('');
+      </div>`;
+    }).join('');
   }
 
   ModalManager.open('cart-modal', triggerEl);
@@ -913,13 +926,68 @@ window.removeCartItem = function(cartId) {
 };
 
 function checkout() {
-  if (cart.length === 0) return showNotification('Your cart is empty!', 'error');
-  if (!currentUser) {
-    showNotification('Please login to checkout!', 'error');
+  if (cart.length === 0) return showNotification('Your reading bag is empty!', 'error');
+  const activeUser = currentUser || window.currentUser;
+  if (!activeUser) {
+    showNotification('Please sign in to proceed with checkout!', 'info');
     closeCart();
     openLogin('login');
     return;
   }
+
+  const subtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+  const isFreeShipping = subtotal >= 999;
+  const shippingCost = isFreeShipping ? 0 : 80;
+  const finalTotal = subtotal + shippingCost;
+  const totalAmountPaise = Math.round(finalTotal * 100);
+
+  // If Razorpay SDK is available, open the official Razorpay Checkout window
+  if (typeof window.Razorpay !== 'undefined') {
+    closeCart();
+    const keyId = window.RAZORPAY_KEY_ID || 'rzp_test_TaeA7VnqRyVNqD';
+    const options = {
+      key: keyId,
+      amount: totalAmountPaise,
+      currency: 'INR',
+      name: 'BookHaven',
+      description: `Checkout for ${cart.length} volume${cart.length > 1 ? 's' : ''}`,
+      image: 'assets/crest.svg',
+      prefill: {
+        name: activeUser.name || 'Patron Reader',
+        email: activeUser.email || '',
+        contact: activeUser.phone || '9876543210'
+      },
+      notes: {
+        address: 'BookHaven Editorial Storefront',
+        order_type: 'Direct Storefront Order'
+      },
+      theme: {
+        color: '#6B1D2F'
+      },
+      modal: {
+        ondismiss: function() {
+          showNotification('Payment window closed.', 'info');
+        }
+      },
+      handler: function(response) {
+        const paymentId = response.razorpay_payment_id || ('RZP_' + Date.now());
+        processPaymentSuccess('Razorpay Online Payment', paymentId, finalTotal);
+      }
+    };
+
+    try {
+      const rzp = new window.Razorpay(options);
+      rzp.on('payment.failed', function(resp) {
+        showNotification(`Payment declined: ${resp.error?.description || 'Transaction unsuccessful'}`, 'error');
+      });
+      rzp.open();
+      return;
+    } catch (err) {
+      console.warn('Razorpay window error, falling back to secure payment modal:', err);
+    }
+  }
+
+  // Fallback if Razorpay SDK blocked or offline
   closeCart();
   openPaymentModal();
 }
@@ -1223,12 +1291,31 @@ function processPayment(method) {
   }, 3400);
 }
 
-function executePaymentLogic(method) {
-  const total = cart.reduce((s, i) => s + i.price * i.quantity, 0);
+async function processPaymentSuccess(method, txnId, total) {
   const purchasedBooks = [...cart];
-  const txnId = 'TXN' + Date.now().toString().slice(-10).toUpperCase();
+  const token = localStorage.getItem('bh_access_token');
 
-  // 💾 Save order to DB
+  // Sync to backend orders API
+  if (token) {
+    try {
+      await fetch(`${getApiBaseUrl()}/orders/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          payment_method: method || 'Razorpay',
+          delivery_address: 'Patron Primary Address',
+          coupon_code: ''
+        })
+      });
+    } catch (err) {
+      console.warn('Backend order recording sync warning:', err);
+    }
+  }
+
+  // 💾 Save order to local DB
   saveOrderRecord(purchasedBooks, total, txnId, method);
 
   // Find eBook items in this purchase
@@ -1249,6 +1336,7 @@ function executePaymentLogic(method) {
 
   const body = document.getElementById('payment-modal-body');
   if (body) {
+    const userEmail = (currentUser && currentUser.email) || 'your registered email';
     body.innerHTML = `
           <div class="pay-success">
             <div class="pay-success-circle">✓</div>
@@ -1256,7 +1344,7 @@ function executePaymentLogic(method) {
             <p style="font-size:1.1rem;font-weight:800;">${formatINR(total)} paid</p>
             <p>via <strong>${escHtml(method)}</strong></p>
             <div class="txn-id">Txn ID: ${escHtml(txnId)}</div>
-            <p style="margin-top:0.8rem;font-size:0.88rem;">Order confirmation sent to <strong>${escHtml(currentUser.email)}</strong></p>
+            <p style="margin-top:0.8rem;font-size:0.88rem;">Order confirmation sent to <strong>${escHtml(userEmail)}</strong></p>
             ${ebookDownloadsHtml}
             <div style="display:flex;gap:0.8rem;margin-top:1.5rem;">
               <button class="submit-btn" style="flex:1;" onclick="closePaymentModal();openTrackingModal('${escHtml(txnId)}')">
@@ -1271,8 +1359,20 @@ function executePaymentLogic(method) {
 
   // Clear cart
   cart = [];
+  if (typeof saveCart === 'function') saveCart();
   updateCartCount();
   _pendingOrderBooks = purchasedBooks;
+
+  // Open modal so user sees confirmation
+  ModalManager.open('payment-modal');
+  showNotification('🎉 Payment successful! Order confirmed.', 'success');
+}
+window.processPaymentSuccess = processPaymentSuccess;
+
+function executePaymentLogic(method) {
+  const total = cart.reduce((s, i) => s + i.price * i.quantity, 0);
+  const txnId = 'TXN' + Date.now().toString().slice(-10).toUpperCase();
+  processPaymentSuccess(method, txnId, total);
 }
 
 function afterPaymentSuccess() {
@@ -2588,18 +2688,18 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // 2. Backdrop click: user clicked directly on the modal backdrop or outside content
-    if (e.target.classList.contains('modal-backdrop') || e.target.classList.contains('modal')) {
-      const activeModal = e.target.closest('.modal') || e.target;
+    if (e.target.classList.contains('modal-backdrop') || e.target.classList.contains('cart-drawer-backdrop') || e.target.id === 'cart-drawer-backdrop' || e.target.classList.contains('modal') || e.target.classList.contains('cart-drawer-overlay')) {
+      const activeModal = e.target.closest('.modal, .cart-drawer-overlay') || e.target;
       if (activeModal && activeModal.id) {
         ModalManager.close(activeModal.id);
       }
       return;
     }
 
-    // 3. Close button click: any element with .close-modal or [data-close-modal]
-    const closeBtn = e.target.closest('.close-modal, [data-close-modal]');
-    if (closeBtn && !closeBtn.classList.contains('modal-backdrop')) {
-      const modal = closeBtn.closest('.modal');
+    // 3. Close button click: any element with .close-modal, [data-close-modal], or .cart-drawer-close
+    const closeBtn = e.target.closest('.close-modal, [data-close-modal], .cart-drawer-close');
+    if (closeBtn && !closeBtn.classList.contains('modal-backdrop') && !closeBtn.classList.contains('cart-drawer-backdrop')) {
+      const modal = closeBtn.closest('.modal, .cart-drawer-overlay');
       if (modal && modal.id) {
         e.preventDefault();
         e.stopPropagation();
