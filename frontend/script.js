@@ -186,37 +186,93 @@ function formatINR(n) { return `₹${n.toLocaleString('en-IN')}`; }
 
 // ---- Auth ----
 function updateUIForLoggedInUser() {
+  const dropdown = document.getElementById('user-account-dropdown') || document.querySelector('.user-account-dropdown');
   const avatar = document.getElementById('user-avatar');
   const loginBtn = document.getElementById('login-btn');
   const nameEl = document.getElementById('menu-user-name');
   const emailEl = document.getElementById('menu-user-email');
   const adminLink = document.getElementById('admin-panel-link');
-  if (!currentUser) return;
-  if (avatar) { avatar.classList.add('active'); avatar.textContent = currentUser.name.charAt(0).toUpperCase(); }
-  if (loginBtn) loginBtn.style.display = 'none';
-  if (nameEl) nameEl.textContent = currentUser.name;
-  if (emailEl) emailEl.textContent = currentUser.email;
+  const logoutBtn = document.getElementById('logout-btn');
+
+  if (!currentUser) {
+    updateUIForLoggedOutUser();
+    return;
+  }
+
+  // 1. Show user avatar dropdown and hide standalone Sign In button
+  if (dropdown) {
+    dropdown.style.display = 'block';
+    dropdown.classList.add('logged-in');
+  }
+  if (avatar) {
+    avatar.style.display = 'flex';
+    avatar.classList.add('active');
+    const displayName = (currentUser.name || currentUser.display_name || currentUser.email || 'U').trim();
+    avatar.textContent = displayName.charAt(0).toUpperCase();
+  }
+  if (loginBtn) {
+    loginBtn.style.display = 'none';
+  }
+
+  // 2. Set profile details in dropdown
+  if (nameEl) nameEl.textContent = currentUser.name || currentUser.display_name || 'Reader';
+  if (emailEl) emailEl.textContent = currentUser.email || '';
+
+  // 3. Admin link if staff
   if (adminLink) {
     adminLink.style.display = (currentUser.is_staff || currentUser.is_superuser) ? '' : 'none';
     const baseUrl = getApiBaseUrl().replace(/\/api\/?$/, '');
     adminLink.href = baseUrl ? `${baseUrl}/admin/` : '/admin/';
   }
+
+  // 4. Logout link visible
+  if (logoutBtn) {
+    logoutBtn.style.display = 'flex';
+  }
 }
 
 function updateUIForLoggedOutUser() {
+  const dropdown = document.getElementById('user-account-dropdown') || document.querySelector('.user-account-dropdown');
   const avatar = document.getElementById('user-avatar');
   const loginBtn = document.getElementById('login-btn');
   const userMenu = document.getElementById('user-menu');
   const adminLink = document.getElementById('admin-panel-link');
-  if (avatar) { avatar.classList.remove('active'); avatar.textContent = 'A'; }
-  if (loginBtn) loginBtn.style.display = 'block';
+  const nameEl = document.getElementById('menu-user-name');
+  const emailEl = document.getElementById('menu-user-email');
+  const logoutBtn = document.getElementById('logout-btn');
+
+  // 1. Completely hide the avatar dropdown when logged out
+  if (dropdown) {
+    dropdown.style.display = 'none';
+    dropdown.classList.remove('logged-in');
+  }
+  if (avatar) {
+    avatar.style.display = 'none';
+    avatar.classList.remove('active');
+    avatar.textContent = '';
+  }
+
+  // 2. Display the Sign In button
+  if (loginBtn) {
+    loginBtn.style.display = '';
+  }
+
+  // 3. Close & reset dropdown
   if (userMenu) userMenu.classList.remove('active');
   if (adminLink) adminLink.style.display = 'none';
+  if (nameEl) nameEl.textContent = 'Guest Reader';
+  if (emailEl) emailEl.textContent = 'Sign in to sync your library';
+  if (logoutBtn) logoutBtn.style.display = 'none';
+
+  // 4. Reset forms
   const loginForm = document.getElementById('login-form');
   const signupForm = document.getElementById('signup-form');
   if (loginForm) loginForm.reset();
   if (signupForm) signupForm.reset();
 }
+
+window.updateUIForLoggedInUser = updateUIForLoggedInUser;
+window.updateUIForLoggedOutUser = updateUIForLoggedOutUser;
 
 // ---- Centralized Modal Lifecycle Manager ----
 const ModalManager = {
@@ -517,9 +573,12 @@ function handleGoogleAuth() {
 function handleLogout() {
   currentUser = null;
   localStorage.removeItem('currentUser');
+  localStorage.removeItem('bh_access_token');
+  localStorage.removeItem('bh_refresh_token');
   updateUIForLoggedOutUser();
   showNotification('Logged out successfully! 👋', 'success');
 }
+window.handleLogout = handleLogout;
 
 // ---- User menu ----
 function toggleUserMenu(e) {
@@ -2353,11 +2412,18 @@ document.addEventListener('DOMContentLoaded', () => {
   try {
     const raw = localStorage.getItem('currentUser');
     const savedUser = raw ? JSON.parse(raw) : null;
-    if (savedUser && typeof savedUser === 'object' && savedUser.name && savedUser.email) {
+    if (savedUser && typeof savedUser === 'object' && (savedUser.name || savedUser.email)) {
       currentUser = savedUser;
       updateUIForLoggedInUser();
+    } else {
+      currentUser = null;
+      updateUIForLoggedOutUser();
     }
-  } catch (e) { localStorage.removeItem('currentUser'); }
+  } catch (e) {
+    localStorage.removeItem('currentUser');
+    currentUser = null;
+    updateUIForLoggedOutUser();
+  }
 
 
   // Render books, trending, offers, ebooks

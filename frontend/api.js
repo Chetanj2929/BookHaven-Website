@@ -734,22 +734,28 @@
   // restoreSession() provides a fast, optimistic UI restore from the localStorage
   // cache so the avatar/name appear instantly — before Clerk's async check completes.
   async function restoreSession() {
-    const token = getToken();
     const cachedUser = localStorage.getItem('currentUser');
-    if (!token || !cachedUser) return;
+    if (!cachedUser) {
+      if (typeof updateUIForLoggedOutUser === 'function') updateUIForLoggedOutUser();
+      return;
+    }
 
     try {
       currentUser = JSON.parse(cachedUser);
-      if (currentUser) {
-        updateUIForLoggedInUser(); // Show UI immediately from cache
+      if (currentUser && (currentUser.name || currentUser.email)) {
+        if (typeof updateUIForLoggedInUser === 'function') updateUIForLoggedInUser();
+      } else {
+        clearTokens();
+        localStorage.removeItem('currentUser');
+        currentUser = null;
+        if (typeof updateUIForLoggedOutUser === 'function') updateUIForLoggedOutUser();
       }
     } catch (_) {
-      // Corrupted cache — clear it and let Clerk re-authenticate
       clearTokens();
       localStorage.removeItem('currentUser');
+      currentUser = null;
+      if (typeof updateUIForLoggedOutUser === 'function') updateUIForLoggedOutUser();
     }
-    // The Clerk listener will verify the session and call onClerkSignIn,
-    // which will refresh the token and update the UI authoritatively.
   }
 
   // tryRefreshToken is kept for backward compat with simplejwt token flow

@@ -583,6 +583,15 @@ header.header-scrolled {
 }
 
 /* User Avatar & Dropdown */
+.user-account-dropdown {
+  position: relative;
+  display: none; /* Hidden by default for guest / logged-out state */
+}
+
+.user-account-dropdown.logged-in {
+  display: block;
+}
+
 .user-avatar {
   width: 38px;
   height: 38px;
@@ -591,13 +600,17 @@ header.header-scrolled {
   color: #FFFFFF;
   font-weight: 700;
   font-size: 0.9rem;
-  display: flex;
+  display: none; /* Hidden by default */
   align-items: center;
   justify-content: center;
   cursor: pointer;
   border: 2px solid var(--bg-canvas);
   box-shadow: var(--shadow-sm);
   transition: transform var(--transition-fast);
+}
+
+.user-avatar.active {
+  display: flex;
 }
 
 .user-avatar:hover {
