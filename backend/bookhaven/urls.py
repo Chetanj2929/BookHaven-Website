@@ -4,10 +4,11 @@ from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
-from .health import health_check
+from .health import health_check, root_index
 
 urlpatterns = [
-    # Health checks
+    # Root & Health checks
+    path('', root_index, name='root-index'),
     path('api/health/', health_check, name='api-health'),
     path('health/', health_check, name='health'),
 
