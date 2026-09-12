@@ -690,26 +690,63 @@ function renderOffers() {
   if (!container) return;
   container.innerHTML = offers.map((o, idx) => {
     const timerId = 'timer-' + idx;
-    const timerHtml = o.hours !== null
-      ? `<div class="offer-timer" id="${timerId}">
-               <div class="timer-block"><span class="timer-num" id="${timerId}-h">--</span><span class="timer-label">Hrs</span></div>
-               <div class="timer-block"><span class="timer-num" id="${timerId}-m">--</span><span class="timer-label">Min</span></div>
-               <div class="timer-block"><span class="timer-num" id="${timerId}-s">--</span><span class="timer-label">Sec</span></div>
-             </div>`
-      : `<div class="offer-expiry">✅ ${escHtml(o.expiry)}</div>`;
+    const isAuto = o.hours === null;
+    const timerHtml = !isAuto
+      ? `<div class="offer-timer-wrap">
+           <div class="offer-timer-kicker"><span class="pulse-beacon"></span> Ends In:</div>
+           <div class="offer-timer" id="${timerId}">
+             <div class="timer-block"><span class="timer-num" id="${timerId}-h">--</span><span class="timer-label">Hrs</span></div>
+             <div class="timer-block"><span class="timer-num" id="${timerId}-m">--</span><span class="timer-label">Min</span></div>
+             <div class="timer-block"><span class="timer-num" id="${timerId}-s">--</span><span class="timer-label">Sec</span></div>
+           </div>
+         </div>`
+      : `<div class="offer-expiry">
+           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+           <span>Auto-Applied • Always Valid</span>
+         </div>`;
+
+    const badgeText = isAuto ? 'Patron Privilege' : 'Limited Courtesy';
+
     return `
-          <div class="offer-card ${escHtml(o.gradient)}">
-            <div class="offer-corner-deco"></div>
-            <div class="offer-corner-deco2"></div>
-            <div class="offer-discount">${escHtml(o.discount)}</div>
-            <div class="offer-title">${escHtml(o.title)}</div>
-            <div class="offer-desc">${escHtml(o.desc)}</div>
-            <div class="offer-code-row">
+      <div class="offer-card ${escHtml(o.gradient)}">
+        <div class="offer-corner-deco"></div>
+        <div class="offer-card-watermark"></div>
+        
+        <div class="offer-card-main">
+          <div class="offer-header-row">
+            <span class="offer-badge-pill">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+              ${badgeText}
+            </span>
+            <span style="font-size:0.75rem;opacity:0.65;letter-spacing:0.1em;font-weight:700;">VOUCHER #0${idx + 1}</span>
+          </div>
+          <div class="offer-discount">${escHtml(o.discount)}</div>
+          <h3 class="offer-title">${escHtml(o.title)}</h3>
+          <p class="offer-desc">${escHtml(o.desc)}</p>
+        </div>
+
+        <div class="offer-perforation">
+          <span class="offer-notch offer-notch-left"></span>
+          <div class="offer-perforation-line"></div>
+          <span class="offer-notch offer-notch-right"></span>
+        </div>
+
+        <div class="offer-card-footer-area">
+          <div class="offer-code-row">
+            <div class="offer-code-box">
+              <span class="offer-code-label">PROMO CODE</span>
               <div class="offer-code" id="code-${idx}">${escHtml(o.code)}</div>
-              <button class="offer-copy-btn" data-copy-idx="${idx}">📋 Copy</button>
             </div>
+            <button class="offer-copy-btn" data-copy-idx="${idx}" title="Click to copy code">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <div class="offer-bottom">
             ${timerHtml}
-          </div>`;
+          </div>
+        </div>
+      </div>`;
   }).join('');
 
   // Start countdown timers
@@ -718,21 +755,38 @@ function renderOffers() {
     const endMs = Date.now() + o.hours * 3600000;
     offerTimers[idx] = endMs;
     updateTimer(idx);
-    setInterval(() => updateTimer(idx), 1000);
+    if (!window._offerIntervalStarted) {
+      setInterval(() => {
+        offers.forEach((_, i) => updateTimer(i));
+      }, 1000);
+      window._offerIntervalStarted = true;
+    }
   });
 
-  // Copy coupon code handler
-  container.addEventListener('click', e => {
-    const btn = e.target.closest('[data-copy-idx]');
-    if (!btn) return;
-    const idx = btn.dataset.copyIdx;
-    const code = offers[idx].code;
-    navigator.clipboard.writeText(code).then(() => {
-      showNotification(`✅ Coupon "${code}" copied!`, 'success');
-    }).catch(() => {
-      showNotification(`Code: ${code}`, 'info');
+  // Copy coupon code handler with interactive feedback
+  if (!container.dataset.hasCopyListener) {
+    container.addEventListener('click', e => {
+      const btn = e.target.closest('[data-copy-idx]');
+      if (!btn) return;
+      const idx = btn.dataset.copyIdx;
+      const code = (offers[idx] && offers[idx].code) || '';
+      if (!code) return;
+      
+      navigator.clipboard.writeText(code).then(() => {
+        showNotification(`Coupon "${code}" copied to clipboard!`, 'success');
+        const origHtml = btn.innerHTML;
+        btn.classList.add('copied');
+        btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg> <span>Copied!</span>`;
+        setTimeout(() => {
+          btn.classList.remove('copied');
+          btn.innerHTML = origHtml;
+        }, 2000);
+      }).catch(() => {
+        showNotification(`Code: ${code}`, 'info');
+      });
     });
-  });
+    container.dataset.hasCopyListener = 'true';
+  }
 }
 
 function updateTimer(idx) {
