@@ -5,7 +5,7 @@ import path from 'path';
 
 const CHROME_PATH = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
 const DEBUG_PORT = 9222;
-const TARGET_URL = 'http://127.0.0.1:8080/';
+const TARGET_URL = 'http://127.0.0.1:5500/';
 
 async function sleep(ms) {
   return new Promise(r => setTimeout(r, ms));
@@ -339,8 +339,8 @@ async function run() {
       document.getElementById('signup-confirm').value = 'Password123!';
       document.getElementById('signup-submit-btn').click();
       
-      // Wait up to 2 seconds for auth handler to complete
-      for (let i = 0; i < 20; i++) {
+      // Wait up to 8 seconds for cloud auth handler to complete
+      for (let i = 0; i < 80; i++) {
         await new Promise(r => setTimeout(r, 100));
         const modal = document.getElementById('login-modal');
         if (!modal.classList.contains('active')) {

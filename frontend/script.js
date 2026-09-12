@@ -1,10 +1,7 @@
 // Dynamic API URL resolution for Localhost vs Production (Render)
 function getApiBaseUrl() {
   if (window.BOOKHAVEN_API_URL) return window.BOOKHAVEN_API_URL.replace(/\/+$/, '');
-  if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-    return 'http://127.0.0.1:8000/api';
-  }
-  return '/api';
+  return 'https://bookhaven-website.onrender.com/api';
 }
 window.getApiBaseUrl = getApiBaseUrl;
 

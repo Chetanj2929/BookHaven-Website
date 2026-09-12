@@ -12,11 +12,7 @@
   'use strict';
 
   // ─── Config ─────────────────────────────────────────────────────────────────
-  const API_BASE = (window.BOOKHAVEN_API_URL || (
-    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-      ? 'http://127.0.0.1:8000/api'
-      : '/api'
-  )).replace(/\/+$/, '');
+  const API_BASE = (window.BOOKHAVEN_API_URL || 'https://bookhaven-website.onrender.com/api').replace(/\/+$/, '');
   const CLERK_PUBLISHABLE_KEY = 'pk_test_cmVhZHktc3RhZy0xMDIzLmNsZXJrLmFjY291bnRzLmRldiQ';
   window.wishlist = [];
 
