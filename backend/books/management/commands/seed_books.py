@@ -75,7 +75,7 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         if options['clear']:
-            self.stdout.write('🗑  Clearing existing data...')
+            self.stdout.write('Clearing existing data...')
             TrendingBook.objects.all().delete()
             Offer.objects.all().delete()
             Book.objects.all().delete()
