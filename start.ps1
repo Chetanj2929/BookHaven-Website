@@ -1,61 +1,63 @@
 #!/usr/bin/env pwsh
 <#
 .SYNOPSIS
-    BookHaven — Start MySQL + Django in one command.
+    BookHaven — Start Full-Stack (Frontend + Django API Backend) in one command.
 
 .DESCRIPTION
-    Starts the MySQL 8.4 server and the Django development server.
-    Run from the "BookHaven website" root directory.
-
-.EXAMPLE
-    .\start.ps1
+    Starts the frontend HTTP server on port 8080 and Django REST API on port 8001.
+    Run from the BookHaven-Website root directory:
+        .\start.ps1
 #>
 
-$MYSQL_BIN = "C:\Program Files\MySQL\MySQL Server 8.4\bin"
-$MYSQL_DATA = "C:\MySQL\data"
-$BACKEND_DIR = "$PSScriptRoot\backend"
+$ROOT_DIR = $PSScriptRoot
+$FRONTEND_DIR = "$ROOT_DIR\frontend"
+$BACKEND_DIR = "$ROOT_DIR\backend"
 
 Write-Host ""
-Write-Host "======================================" -ForegroundColor Cyan
-Write-Host "  BookHaven — Starting Backend Stack  " -ForegroundColor Cyan
-Write-Host "======================================" -ForegroundColor Cyan
+Write-Host "=================================================" -ForegroundColor Cyan
+Write-Host "    BookHaven — Full-Stack Literary Platform    " -ForegroundColor Cyan
+Write-Host "=================================================" -ForegroundColor Cyan
 Write-Host ""
 
-# ── 1. Start MySQL ───────────────────────────────────────────────
-$mysqlRunning = Get-Process -Name mysqld -ErrorAction SilentlyContinue
-if ($mysqlRunning) {
-    Write-Host "[MySQL]  Already running (PID $($mysqlRunning.Id))" -ForegroundColor Green
+# ── 1. Start Frontend Server (Port 8080) ──────────────────────────
+Write-Host "[Frontend] Starting local HTTP server on port 8080..." -ForegroundColor Yellow
+$frontendRunning = Get-NetTCPConnection -LocalPort 8080 -ErrorAction SilentlyContinue
+if ($frontendRunning) {
+    Write-Host "[Frontend] Server already listening on http://127.0.0.1:8080" -ForegroundColor Green
 } else {
-    Write-Host "[MySQL]  Starting MySQL 8.4..." -ForegroundColor Yellow
-    Start-Process -FilePath "$MYSQL_BIN\mysqld.exe" `
-        -ArgumentList "--datadir=`"$MYSQL_DATA`"" `
+    Start-Process -FilePath "python" `
+        -ArgumentList "-m http.server 8080 --directory `"$FRONTEND_DIR`"" `
         -WindowStyle Hidden
-    Start-Sleep 4
-
-    # Verify MySQL is up
-    $env:Path += ";$MYSQL_BIN"
-    $test = & mysql -u bookhaven_user -pBookHaven@2026 bookhaven_db -e "SELECT 1;" 2>&1
-    if ($LASTEXITCODE -eq 0) {
-        Write-Host "[MySQL]  Running on port 3306" -ForegroundColor Green
-    } else {
-        Write-Host "[MySQL]  WARNING: Could not connect. Check if port 3306 is in use." -ForegroundColor Red
-    }
+    Start-Sleep -Seconds 1
+    Write-Host "[Frontend] Running at: http://127.0.0.1:8080/index.html" -ForegroundColor Green
 }
 
+# ── 2. Start Django API Backend (Port 8001) ───────────────────────
+Write-Host "[Backend]  Checking Django REST API on port 8001..." -ForegroundColor Yellow
+$backendRunning = Get-NetTCPConnection -LocalPort 8001 -ErrorAction SilentlyContinue
+if ($backendRunning) {
+    Write-Host "[Backend]  Django API already running on http://127.0.0.1:8001" -ForegroundColor Green
+} else {
+    Write-Host "[Backend]  Starting Django dev server on port 8001..." -ForegroundColor Yellow
+    Set-Location $BACKEND_DIR
+    & ".\venv\Scripts\Activate.ps1"
+    Start-Process -FilePath ".\venv\Scripts\python.exe" `
+        -ArgumentList "manage.py runserver 8001" `
+        -WorkingDirectory $BACKEND_DIR `
+        -WindowStyle Hidden
+    Start-Sleep -Seconds 2
+    Write-Host "[Backend]  Running at: http://127.0.0.1:8001/api/" -ForegroundColor Green
+}
+
+Set-Location $ROOT_DIR
+
 Write-Host ""
-
-# ── 2. Start Django ──────────────────────────────────────────────
-Write-Host "[Django] Starting Django development server..." -ForegroundColor Yellow
-
-Set-Location $BACKEND_DIR
-& ".\venv\Scripts\Activate.ps1"
-
+Write-Host "=================================================" -ForegroundColor Cyan
+Write-Host "  Website URL:  http://127.0.0.1:8080/index.html " -ForegroundColor White
+Write-Host "  API Base:     http://127.0.0.1:8001/api/       " -ForegroundColor White
+Write-Host "  API Health:   http://127.0.0.1:8001/api/health/" -ForegroundColor White
+Write-Host "  Admin Panel:  http://127.0.0.1:8001/admin/     " -ForegroundColor White
+Write-Host "=================================================" -ForegroundColor Cyan
 Write-Host ""
-Write-Host "======================================" -ForegroundColor Cyan
-Write-Host "  Django API:  http://127.0.0.1:8000  " -ForegroundColor White
-Write-Host "  Admin:       http://127.0.0.1:8000/admin/  " -ForegroundColor White
-Write-Host "  DB:          bookhaven_db @ MySQL 8.4  " -ForegroundColor White
-Write-Host "======================================" -ForegroundColor Cyan
-Write-Host ""
-
-python manage.py runserver 8000
+Write-Host "Opening BookHaven website in your default browser..." -ForegroundColor Green
+Start-Process "http://127.0.0.1:8080/index.html"

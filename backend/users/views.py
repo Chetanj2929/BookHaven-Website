@@ -30,16 +30,15 @@ class RegisterView(APIView):
 
     def post(self, request):
         serializer = UserRegistrationSerializer(data=request.data)
-        if serializer.is_valid():
-            user = serializer.save()
-            tokens = get_tokens_for_user(user)
-            profile = UserProfileSerializer(user).data
-            return Response({
-                'message': f'Welcome to BookHaven, {user.get_display_name()}! 🎉',
-                'user': profile,
-                **tokens,
-            }, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.save()
+        tokens = get_tokens_for_user(user)
+        profile = UserProfileSerializer(user).data
+        return Response({
+            'message': f'Welcome to BookHaven, {user.get_display_name()}! 🎉',
+            'user': profile,
+            **tokens,
+        }, status=status.HTTP_201_CREATED)
 
 
 from django.contrib.auth import login as django_login
@@ -50,17 +49,16 @@ class LoginView(APIView):
 
     def post(self, request):
         serializer = UserLoginSerializer(data=request.data)
-        if serializer.is_valid():
-            user = serializer.validated_data['user']
-            django_login(request, user)
-            tokens = get_tokens_for_user(user)
-            profile = UserProfileSerializer(user).data
-            return Response({
-                'message': f'Welcome back, {user.get_display_name()}! 👋',
-                'user': profile,
-                **tokens,
-            })
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.validated_data['user']
+        django_login(request, user)
+        tokens = get_tokens_for_user(user)
+        profile = UserProfileSerializer(user).data
+        return Response({
+            'message': f'Welcome back, {user.get_display_name()}! 👋',
+            'user': profile,
+            **tokens,
+        })
 
 
 from django.contrib.auth import logout as django_logout

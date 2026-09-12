@@ -10,6 +10,81 @@ function escHtml(str) {
     .replace(/\//g, '&#x2F;');
 }
 
+// ---- Luxury Editorial Book Cover SVG Generator (100% resilient offline & placeholder) ----
+function generateEditorialCoverSvg(title, author, category) {
+  const safeTitle = (title || 'Selected Works').toUpperCase();
+  const safeAuthor = (author || 'BookHaven Curator').toUpperCase();
+  const cat = (category || 'Classics').toLowerCase();
+
+  // Color palettes tailored by genre
+  let bg1 = '#2B121A', bg2 = '#15080D', accent = '#D4AF37', accentLight = '#F3E5AB';
+  if (cat.includes('scifi') || cat.includes('sci-fi')) {
+    bg1 = '#0D1B2A'; bg2 = '#060B12'; accent = '#7EB6D9'; accentLight = '#E3F2FD';
+  } else if (cat.includes('self') || cat.includes('philosophy') || cat.includes('business')) {
+    bg1 = '#132A13'; bg2 = '#081408'; accent = '#DDA15E'; accentLight = '#FEFAE0';
+  } else if (cat.includes('mystery') || cat.includes('thriller') || cat.includes('crime')) {
+    bg1 = '#1F1E24'; bg2 = '#0E0D10'; accent = '#C19A6B'; accentLight = '#FFFFFF';
+  } else if (cat.includes('fiction') || cat.includes('romance')) {
+    bg1 = '#3A1E14'; bg2 = '#1C0D08'; accent = '#E0A96D'; accentLight = '#FBF5EE';
+  }
+
+  // Split title into lines for balanced typography
+  const words = safeTitle.split(' ');
+  let line1 = '', line2 = '', line3 = '';
+  if (words.length <= 2) {
+    line1 = words.join(' ');
+  } else if (words.length <= 4) {
+    line1 = words.slice(0, 2).join(' ');
+    line2 = words.slice(2).join(' ');
+  } else {
+    line1 = words.slice(0, 2).join(' ');
+    line2 = words.slice(2, 4).join(' ');
+    line3 = words.slice(4).join(' ');
+  }
+
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 450" width="300" height="450">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="${bg1}" />
+      <stop offset="100%" stop-color="${bg2}" />
+    </linearGradient>
+    <linearGradient id="spine" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#000" stop-opacity="0.4" />
+      <stop offset="100%" stop-color="#000" stop-opacity="0" />
+    </linearGradient>
+    <linearGradient id="foil" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="${accentLight}" />
+      <stop offset="50%" stop-color="${accent}" />
+      <stop offset="100%" stop-color="${accentLight}" />
+    </linearGradient>
+  </defs>
+  <rect width="300" height="450" fill="url(#bg)" />
+  <rect x="0" y="0" width="20" height="450" fill="url(#spine)" />
+  <rect x="22" y="22" width="256" height="406" fill="none" stroke="${accent}" stroke-width="1.5" opacity="0.65" />
+  <rect x="29" y="29" width="242" height="392" fill="none" stroke="${accent}" stroke-width="0.75" stroke-dasharray="3,3" opacity="0.4" />
+  <circle cx="29" cy="29" r="2.5" fill="${accent}" opacity="0.8" />
+  <circle cx="271" cy="29" r="2.5" fill="${accent}" opacity="0.8" />
+  <circle cx="29" cy="421" r="2.5" fill="${accent}" opacity="0.8" />
+  <circle cx="271" cy="421" r="2.5" fill="${accent}" opacity="0.8" />
+  <g transform="translate(138, 62)">
+    <path d="M2 3C2 2.4 2.4 2 3 2H7C7.6 2 8 2.4 8 3V13C8 12.4 7.6 12 7 12H3C2.4 12 2 12.4 2 13V3Z" stroke="${accent}" stroke-width="1.2" fill="none"/>
+    <path d="M14 3C14 2.4 13.6 2 13 2H9C8.4 2 8 2.4 8 3V13C8 12.4 8.4 12 9 12H13C13.6 12 14 12.4 14 13V3Z" stroke="${accent}" stroke-width="1.2" fill="none"/>
+    <circle cx="8" cy="20" r="1.5" fill="${accent}"/>
+  </g>
+  <text x="150" y="106" fill="${accent}" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="8.5" font-weight="700" letter-spacing="3" text-anchor="middle" opacity="0.85">${(category || 'EDITION').toUpperCase()}</text>
+  <line x1="115" y1="120" x2="185" y2="120" stroke="${accent}" stroke-width="0.75" opacity="0.5" />
+  <text x="150" y="${line3 ? 180 : (line2 ? 195 : 210)}" fill="url(#foil)" font-family="Georgia, serif" font-size="${safeTitle.length > 22 ? 16 : 19}" font-weight="700" letter-spacing="1.5" text-anchor="middle">${line1}</text>
+  ${line2 ? `<text x="150" y="${line3 ? 208 : 225}" fill="url(#foil)" font-family="Georgia, serif" font-size="${safeTitle.length > 22 ? 16 : 19}" font-weight="700" letter-spacing="1.5" text-anchor="middle">${line2}</text>` : ''}
+  ${line3 ? `<text x="150" y="236" fill="url(#foil)" font-family="Georgia, serif" font-size="${safeTitle.length > 22 ? 15 : 17}" font-weight="700" letter-spacing="1.5" text-anchor="middle">${line3}</text>` : ''}
+  <polygon points="150,265 153,269 150,273 147,269" fill="${accent}" opacity="0.6"/>
+  <text x="150" y="325" fill="#E8E4DD" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="10.5" font-weight="500" letter-spacing="2.5" text-anchor="middle">${safeAuthor}</text>
+  <line x1="80" y1="365" x2="220" y2="365" stroke="${accent}" stroke-width="0.5" opacity="0.3" />
+  <text x="150" y="385" fill="${accent}" font-family="Georgia, serif" font-size="8.5" font-weight="600" letter-spacing="3" text-anchor="middle" opacity="0.75">BOOKHAVEN • CURATED</text>
+</svg>`;
+
+  return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg.trim());
+}
+
 // ---- Data ----
 const books = [
   { title: "Sapiens", author: "Yuval Noah Harari", price: 599, id: 1, category: "Classics", image: "https://covers.openlibrary.org/b/isbn/9780062316097-L.jpg", rating: 4.8, reviews: 15234, ebook: true, badge: "Bestseller" },
@@ -23,11 +98,11 @@ const books = [
   { title: "The Hobbit", author: "J.R.R. Tolkien", price: 450, id: 9, category: "Fiction", image: "https://covers.openlibrary.org/b/isbn/9780547928227-L.jpg", rating: 4.8, reviews: 21345, ebook: false, badge: "Classic" },
   { title: "Dune", author: "Frank Herbert", price: 599, id: 10, category: "Sci-Fi", image: "https://covers.openlibrary.org/b/isbn/9780441013593-L.jpg", rating: 4.8, reviews: 31200, ebook: true, badge: "Epic" },
   { title: "Thinking, Fast and Slow", author: "Daniel Kahneman", price: 549, id: 11, category: "Self-Help", image: "https://covers.openlibrary.org/b/isbn/9780374533557-L.jpg", rating: 4.6, reviews: 14500, ebook: true, badge: "Bestseller" },
-  { title: "To Kill a Mockingbird", author: "Harper Lee", price: 325, id: 12, category: "Classics", image: "https://covers.openlibrary.org/b/isbn/9780061935466-L.jpg", rating: 4.7, reviews: 22100, ebook: true, badge: "Classic" },
+  { title: "To Kill a Mockingbird", author: "Harper Lee", price: 325, id: 12, category: "Classics", image: "https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?q=80&w=600&auto=format&fit=crop", rating: 4.7, reviews: 22100, ebook: true, badge: "Classic" },
   { title: "The Da Vinci Code", author: "Dan Brown", price: 449, id: 13, category: "Mystery", image: "https://covers.openlibrary.org/b/isbn/9780307474278-L.jpg", rating: 4.4, reviews: 19800, ebook: true, badge: "Thriller" },
   { title: "Gone Girl", author: "Gillian Flynn", price: 399, id: 14, category: "Mystery", image: "https://covers.openlibrary.org/b/isbn/9780307588364-L.jpg", rating: 4.3, reviews: 16300, ebook: true, badge: "Bestseller" },
   { title: "The Martian", author: "Andy Weir", price: 499, id: 15, category: "Sci-Fi", image: "https://covers.openlibrary.org/b/isbn/9780804139021-L.jpg", rating: 4.7, reviews: 18700, ebook: true, badge: "Award Winner" },
-  { title: "Zero to One", author: "Peter Thiel", price: 575, id: 16, category: "Business", image: "https://covers.openlibrary.org/b/isbn/9780804139021-L.jpg", rating: 4.5, reviews: 11200, ebook: true, badge: "Must Read" },
+  { title: "Zero to One", author: "Peter Thiel", price: 575, id: 16, category: "Business", image: "https://covers.openlibrary.org/b/isbn/9780804139298-L.jpg", rating: 4.5, reviews: 11200, ebook: true, badge: "Must Read" },
   { title: "The Lean Startup", author: "Eric Ries", price: 525, id: 17, category: "Business", image: "https://covers.openlibrary.org/b/isbn/9780307887894-L.jpg", rating: 4.4, reviews: 9800, ebook: false, badge: "Startup Bible" },
   { title: "Steve Jobs", author: "Walter Isaacson", price: 699, id: 18, category: "Biography", image: "https://covers.openlibrary.org/b/isbn/9781451648539-L.jpg", rating: 4.6, reviews: 17600, ebook: true, badge: "Inspiring" },
   { title: "Elon Musk", author: "Walter Isaacson", price: 749, id: 19, category: "Biography", image: "https://covers.openlibrary.org/b/isbn/9781982181284-L.jpg", rating: 4.5, reviews: 8400, ebook: true, badge: "New" },
@@ -236,95 +311,81 @@ function generateBooks(filter = 'all') {
 }
 
 function buildBookCard(book) {
-  const bookReviews = reviewsDB[book.id] || [];
-  const latestReview = bookReviews[0];
-  let reviewsHtml = '';
-  if (latestReview) {
-    const userName = escHtml(latestReview.user);
-    const reviewText = latestReview.text ? escHtml(latestReview.text.slice(0, 120)) + (latestReview.text.length > 120 ? '…' : '') : '';
-    const photoHtml = latestReview.photos.length
-      ? '<div class="review-photos">' + latestReview.photos.slice(0, 3).map((p, pi) =>
-        `<img class="review-photo-thumb" src="${escHtml(p)}" alt="Review photo" data-lightbox-idx="${pi}" />`
-      ).join('') + '</div>'
-      : '';
-    const seeAll = bookReviews.length > 1
-      ? `<button class="see-all-reviews-btn" data-see-reviews="${book.id}">See all ${bookReviews.length} reviews →</button>`
-      : '';
-    reviewsHtml = `
-          <div class="book-reviews-section">
-            <div class="book-review-item">
-              <div class="review-user-avatar">${escHtml(latestReview.user.charAt(0).toUpperCase())}</div>
-              <div class="review-content">
-                <div class="review-header-row">
-                  <span class="review-user-name">${userName}</span>
-                  <span class="review-stars">${'★'.repeat(latestReview.rating)}${'☆'.repeat(5 - latestReview.rating)}</span>
-                </div>
-                ${reviewText ? `<div class="review-text">${reviewText}</div>` : ''}
-                ${photoHtml}
-              </div>
-            </div>
-            ${seeAll}
-          </div>`;
-  }
-
-  const ebookBadge = book.ebook ? '<span class="ebook-badge">📱 eBook</span>' : '';
-  const formatRow = book.ebook
-    ? `<div class="book-format-row">
-            <button class="format-btn selected" data-fmt="physical" data-book-id="${book.id}">📚 Physical</button>
-            <button class="format-btn" data-fmt="ebook" data-book-id="${book.id}">📱 eBook (₹${Math.round(book.price * 0.6)})</button>
-           </div>`
-    : '';
+  const bookReviews = (typeof reviewsDB !== 'undefined' && reviewsDB[book.id]) || [];
+  const isWishlisted = Array.isArray(window.wishlist) && window.wishlist.some(id => String(id) === String(book.id));
+  const ebookPrice = Math.round(book.price * 0.6);
+  const ebookBadge = book.ebook ? `<span class="book-card-ebook-price">eBook ${formatINR(ebookPrice)}</span>` : '';
+  const badgeClass = book.badge === 'Hot' ? 'badge-hot' : (book.badge === 'Classic' ? 'badge-classic' : '');
+  const badgeHtml = book.badge ? `<span class="book-badge ${badgeClass}">${escHtml(book.badge)}</span>` : '';
+  const fallbackSvg = generateEditorialCoverSvg(book.title, book.author, book.category);
 
   return `
-        <div class="book-card" data-id="${book.id}">
-          <span class="book-badge">${escHtml(book.badge || 'Bestseller')}</span>
-          <div class="book-image-container">
-            <button class="wishlist-btn" data-wishlist-book="${book.id}" style="position:absolute; top:10px; right:10px; background:white; border:none; border-radius:50%; width:32px; height:32px; font-size:16px; cursor:pointer; box-shadow:0 2px 5px rgba(0,0,0,0.2); z-index:2; display:flex; align-items:center; justify-content:center; transition:transform 0.2s;">🤍</button>
-            <img src="${escHtml(book.image)}" alt="${escHtml(book.title)}" class="book-image" onerror="this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22300%22 height=%22400%22%3E%3Crect fill=%22%23667eea%22 width=%22300%22 height=%22400%22/%3E%3Ctext x=%2250%25%22 y=%2250%25%22 fill=%22white%22 font-size=%2218%22 text-anchor=%22middle%22 dy=%22.3em%22%3E📚%3C/text%3E%3C/svg%3E'" />
-            <div class="book-overlay">
-              <button class="quick-view-btn" data-quick-view>Quick View</button>
-            </div>
+    <div class="book-card" data-id="${book.id}">
+      <div class="book-card-cover-wrap">
+        ${badgeHtml}
+        <button class="book-wishlist-btn ${isWishlisted ? 'active' : ''}" data-wishlist-book="${book.id}" aria-label="Save to Wishlist">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="${isWishlisted ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2">
+            <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+          </svg>
+        </button>
+        <img src="${escHtml(book.image || fallbackSvg)}" 
+             alt="${escHtml(book.title)}" 
+             class="book-card-image" 
+             loading="lazy" 
+             onload="if(this.naturalWidth<=1||this.naturalHeight<=1){this.onerror=null;this.onload=null;this.src='${fallbackSvg}';}" 
+             onerror="this.onerror=null;this.onload=null;this.src='${fallbackSvg}';" />
+        <div class="book-card-spine"></div>
+        <div class="book-card-quick-actions">
+          <button class="book-quick-view-btn" data-quick-view>Quick View</button>
+        </div>
+      </div>
+      <div class="book-card-body">
+        <span class="book-card-category">${escHtml(book.category || 'Literature')}</span>
+        <h3 class="book-card-title">${escHtml(book.title)}</h3>
+        <p class="book-card-author">by ${escHtml(book.author)}</p>
+        <div class="book-card-rating">
+          <span class="rating-stars">${'★'.repeat(Math.round(book.rating))}${'☆'.repeat(5 - Math.round(book.rating))}</span>
+          <span>${book.rating} (${(book.reviews + bookReviews.length).toLocaleString()})</span>
+        </div>
+        <div class="book-card-footer">
+          <div class="book-card-price-wrap">
+            <span class="book-card-price">${formatINR(book.price)}</span>
+            ${ebookBadge}
           </div>
-          <div class="book-info">
-            <h3 class="book-title">${escHtml(book.title)} ${ebookBadge}</h3>
-            <p class="book-author">${escHtml(book.author)}</p>
-            <div class="book-rating">
-              <span class="stars">${'★'.repeat(Math.round(book.rating))}${'☆'.repeat(5 - Math.round(book.rating))}</span>
-              <span class="rating-text">${book.rating} (${(book.reviews + bookReviews.length).toLocaleString()})</span>
-            </div>
-            ${formatRow}
-            <div class="book-footer">
-              <div class="book-price">${formatINR(book.price)}</div>
-              <button class="add-cart-btn" data-add-to-cart>Add to Cart</button>
-            </div>
-            ${reviewsHtml}
-          </div>
-        </div>`;
+          <button class="btn-add-bag" data-add-to-cart>Add to Bag</button>
+        </div>
+      </div>
+    </div>`;
 }
 
-// ---- Trending ----
+// ---- Trending (Readers Are Loving) ----
 function renderTrending() {
   const container = document.getElementById('trending-container');
   if (!container) return;
   container.innerHTML = trendingBooks.map(t => {
     const book = books.find(b => b.id === t.bookId);
     if (!book) return '';
+    const rankFormatted = String(t.rank).padStart(2, '0');
+    const fallbackSvg = generateEditorialCoverSvg(book.title, book.author, book.category);
     return `
-          <div class="trending-card" data-id="${book.id}">
-            <div class="trending-rank">#${t.rank}</div>
-            <img class="trending-cover" src="${escHtml(book.image)}" alt="${escHtml(book.title)}"
-                 onerror="this.style.display='none'" />
-            <div class="trending-info">
-              <div class="trending-title">${escHtml(book.title)}</div>
-              <div class="trending-author">${escHtml(book.author)}</div>
-              <div class="trending-meta">
-                <span class="trending-price">${formatINR(book.price)}</span>
-                ${t.hot ? '<span class="trending-fire">🔥</span>' : ''}
-                <span style="font-size:0.75rem;color:var(--text-secondary);font-weight:700;">${escHtml(t.weeklyChange)}</span>
-              </div>
-            </div>
-            <button class="trending-add-btn" data-add-trending="${book.id}">+ Cart</button>
-          </div>`;
+      <div class="trending-card-ranked" data-id="${book.id}">
+        <div class="trending-rank-col">
+          <span class="trending-rank-num">${rankFormatted}</span>
+          <span class="trending-growth-badge">${escHtml(t.weeklyChange)}</span>
+        </div>
+        <img class="trending-book-cover" 
+             src="${escHtml(book.image || fallbackSvg)}" 
+             alt="${escHtml(book.title)}" 
+             loading="lazy"
+             onload="if(this.naturalWidth<=1||this.naturalHeight<=1){this.onerror=null;this.onload=null;this.src='${fallbackSvg}';}" 
+             onerror="this.onerror=null;this.onload=null;this.src='${fallbackSvg}';" />
+        <div class="trending-book-info">
+          <h4 class="trending-book-title">${escHtml(book.title)}</h4>
+          <span class="trending-book-author">by ${escHtml(book.author)}</span>
+          <span class="trending-book-price">${formatINR(book.price)}</span>
+          <button class="btn-add-bag" style="margin-top:0.6rem;width:fit-content;" data-add-trending="${book.id}">+ Add to Bag</button>
+        </div>
+      </div>`;
   }).join('');
 }
 
@@ -439,28 +500,98 @@ function openCart() {
   const itemsDiv = document.getElementById('cart-items');
   const totalDiv = document.getElementById('cart-total');
   if (!modal || !itemsDiv || !totalDiv) return;
+  const countLabel = document.getElementById('cart-item-count-label');
+  const subtotalDiv = document.getElementById('cart-subtotal');
+  const shippingDiv = document.getElementById('cart-shipping-cost');
+  const meterText = document.getElementById('free-shipping-text');
+  const meterFill = document.getElementById('free-shipping-fill');
+
+  const totalCount = cart.reduce((sum, item) => sum + item.quantity, 0);
+  if (countLabel) countLabel.textContent = `${totalCount} volume${totalCount === 1 ? '' : 's'}`;
+
   if (cart.length === 0) {
-    itemsDiv.innerHTML = '<p style="text-align:center;color:var(--text-secondary);padding:2rem;">Your cart is empty</p>';
+    itemsDiv.innerHTML = `
+      <div style="text-align:center;padding:4rem 1.5rem;color:var(--text-secondary);">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#B28A4A" stroke-width="1.5" style="margin:0 auto 1.25rem auto;">
+          <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path>
+          <line x1="3" y1="6" x2="21" y2="6"></line>
+          <path d="M16 10a4 4 0 0 1-8 0"></path>
+        </svg>
+        <h3 style="font-family:var(--font-serif);font-size:1.35rem;margin-bottom:0.5rem;color:var(--text-primary);">Your Reading Bag is Empty</h3>
+        <p style="font-size:0.9rem;color:var(--text-muted);max-width:280px;margin:0 auto 1.5rem auto;">Explore our curated shelves and discover books worth keeping.</p>
+        <a href="#books" onclick="closeCart();" class="btn btn-editorial-secondary" style="font-size:0.8rem;padding:0.6rem 1.25rem;">Browse Catalogue</a>
+      </div>`;
     totalDiv.textContent = formatINR(0);
+    if (subtotalDiv) subtotalDiv.textContent = formatINR(0);
+    if (shippingDiv) shippingDiv.textContent = 'Calculated at checkout';
+    if (meterText) meterText.textContent = 'Add ₹999 for complimentary standard courier delivery';
+    if (meterFill) meterFill.style.width = '0%';
   } else {
-    const total = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+    const subtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+    const isFreeShipping = subtotal >= 999;
+    const shippingCost = isFreeShipping ? 0 : 80;
+    const finalTotal = subtotal + (isFreeShipping ? 0 : 80);
+
+    if (subtotalDiv) subtotalDiv.textContent = formatINR(subtotal);
+    if (shippingDiv) shippingDiv.textContent = isFreeShipping ? 'FREE' : formatINR(shippingCost);
+    totalDiv.textContent = formatINR(finalTotal);
+
+    const remaining = Math.max(0, 999 - subtotal);
+    const percent = Math.min(100, Math.round((subtotal / 999) * 100));
+    if (meterFill) meterFill.style.width = `${percent}%`;
+    if (meterText) {
+      meterText.textContent = isFreeShipping
+        ? '🎉 You have unlocked complimentary courier delivery!'
+        : `Add ${formatINR(remaining)} more for complimentary delivery`;
+    }
+
     itemsDiv.innerHTML = cart.map(item => `
-          <div style="display:flex;justify-content:space-between;padding:1rem;background:var(--light);border-radius:16px;margin-bottom:1rem;">
-            <div>
-              <div style="font-weight:600;margin-bottom:0.3rem;">${item.title}</div>
-              <div style="color:var(--text-secondary);font-size:0.9rem;">Qty: ${item.quantity}</div>
-            </div>
-            <div style="font-weight:800;color:var(--primary);">${formatINR(item.price * item.quantity)}</div>
-          </div>`).join('');
-    totalDiv.textContent = formatINR(total);
+      <div class="cart-item-row" data-cart-id="${item.cartId}">
+        <img src="${escHtml(item.image)}" alt="${escHtml(item.title)}" class="cart-item-cover" onerror="this.style.display='none'" />
+        <div class="cart-item-info">
+          <h4 class="cart-item-title">${escHtml(item.title)}</h4>
+          <span class="cart-item-format">${item.format === 'ebook' ? 'Digital Edition (eBook)' : 'Hardcover / Paperback'}</span>
+          <div class="cart-item-stepper">
+            <button class="stepper-btn" onclick="changeCartQty('${item.cartId}', -1)" aria-label="Decrease quantity">&minus;</button>
+            <span class="stepper-value">${item.quantity}</span>
+            <button class="stepper-btn" onclick="changeCartQty('${item.cartId}', 1)" aria-label="Increase quantity">&plus;</button>
+          </div>
+        </div>
+        <div class="cart-item-right">
+          <span class="cart-item-subtotal">${formatINR(item.price * item.quantity)}</span>
+          <button class="cart-item-remove-btn" onclick="removeCartItem('${item.cartId}')">Remove</button>
+        </div>
+      </div>`).join('');
   }
   modal.classList.add('active');
+  document.body.style.overflow = 'hidden';
 }
 
 function closeCart() {
   const modal = document.getElementById('cart-modal');
-  if (modal) modal.classList.remove('active');
+  if (modal) {
+    modal.classList.remove('active');
+    document.body.style.overflow = 'auto';
+  }
 }
+
+window.changeCartQty = function(cartId, delta) {
+  const item = cart.find(i => i.cartId === cartId);
+  if (!item) return;
+  item.quantity += delta;
+  if (item.quantity <= 0) {
+    cart = cart.filter(i => i.cartId !== cartId);
+  }
+  updateCartCount();
+  openCart();
+};
+
+window.removeCartItem = function(cartId) {
+  cart = cart.filter(i => i.cartId !== cartId);
+  updateCartCount();
+  openCart();
+  showNotification('Volume removed from your bag.');
+};
 
 function checkout() {
   if (cart.length === 0) return showNotification('Your cart is empty!', 'error');
@@ -2236,17 +2367,17 @@ document.addEventListener('DOMContentLoaded', () => {
   const settingsCloseBtn = document.getElementById('settings-close-btn');
   if (settingsCloseBtn) settingsCloseBtn.addEventListener('click', closeSettingsModal);
   const settingsModal = document.getElementById('settings-modal');
-  if (settingsModal) settingsModal.addEventListener('click', (e) => { if (e.target.id === 'settings-modal') closeSettingsModal(); });
+  if (settingsModal) settingsModal.addEventListener('click', (e) => { if (e.target.id === 'settings-modal' || e.target.classList.contains('modal-backdrop')) closeSettingsModal(); });
 
   // Wishlist modal wire-up
   const wishlistCloseBtn = document.getElementById('wishlist-close-btn');
   if (wishlistCloseBtn) wishlistCloseBtn.addEventListener('click', closeWishlistModal);
   const wishlistModal = document.getElementById('wishlist-modal');
-  if (wishlistModal) wishlistModal.addEventListener('click', (e) => { if (e.target.id === 'wishlist-modal') closeWishlistModal(); });
+  if (wishlistModal) wishlistModal.addEventListener('click', (e) => { if (e.target.id === 'wishlist-modal' || e.target.classList.contains('modal-backdrop')) closeWishlistModal(); });
 
   // Profile modal close
   document.getElementById('profile-close-btn').addEventListener('click', closeProfileModal);
-  document.getElementById('profile-modal').addEventListener('click', (e) => { if (e.target.id === 'profile-modal') closeProfileModal(); });
+  document.getElementById('profile-modal').addEventListener('click', (e) => { if (e.target.id === 'profile-modal' || e.target.classList.contains('modal-backdrop')) closeProfileModal(); });
 
   // Lightbox close
   document.getElementById('lightbox-close').addEventListener('click', closeLightbox);
@@ -2254,7 +2385,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Quick View modal close
   document.getElementById('quick-view-close-btn').addEventListener('click', closeQuickView);
-  document.getElementById('quick-view-modal').addEventListener('click', (e) => { if (e.target.id === 'quick-view-modal') closeQuickView(); });
+  document.getElementById('quick-view-modal').addEventListener('click', (e) => { if (e.target.id === 'quick-view-modal' || e.target.classList.contains('modal-backdrop')) closeQuickView(); });
 
   // Submit forms with Enter inside modal inputs
   document.querySelectorAll('.form-input').forEach(input => {
@@ -2296,6 +2427,25 @@ document.addEventListener('DOMContentLoaded', () => {
     btn.appendChild(wave);
     wave.addEventListener('animationend', () => wave.remove());
   });
+
+  // 4. Escape key listener for all modals
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      const activeModal = document.querySelector('.modal.active');
+      if (activeModal) {
+        if (activeModal.id === 'quick-view-modal') closeQuickView();
+        else if (activeModal.id === 'settings-modal') { if(typeof closeSettingsModal === 'function') closeSettingsModal(); }
+        else if (activeModal.id === 'wishlist-modal') { if(typeof closeWishlistModal === 'function') closeWishlistModal(); }
+        else if (activeModal.id === 'profile-modal') { if(typeof closeProfileModal === 'function') closeProfileModal(); }
+        else if (activeModal.id === 'payment-modal') { if(typeof closePaymentModal === 'function') closePaymentModal(); }
+      }
+      
+      const lightbox = document.getElementById('lightbox');
+      if (lightbox && lightbox.classList.contains('active')) {
+        if(typeof closeLightbox === 'function') closeLightbox();
+      }
+    }
+  });
 });
 
 // ---- Quick View ----
@@ -2317,99 +2467,126 @@ function showQuickView(bookId) {
   _qvFmt = 'physical';
 
   const desc = QV_DESCRIPTIONS[book.category] || QV_DESCRIPTIONS['Classics'];
-  const stars = '★'.repeat(Math.round(book.rating)) + '☆'.repeat(5 - Math.round(book.rating));
+  const starsFull = Math.round(book.rating);
+  const starsEmpty = 5 - starsFull;
+  let starsHtml = '';
+  for(let i=0; i<starsFull; i++) starsHtml += '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>';
+  for(let i=0; i<starsEmpty; i++) starsHtml += '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>';
+
   const ebookPrice = Math.round(book.price * 0.6);
   const reviewsDB_count = (reviewsDB[book.id] || []).length;
   const totalReviews = (book.reviews + reviewsDB_count).toLocaleString();
 
   const formatRow = book.ebook ? `
-        <div class="qv-format-row">
-          <button class="qv-fmt-btn selected" id="qv-fmt-physical"
-            onclick="selectQVFormat('physical',${book.price},${ebookPrice})">
-            📚 Physical &mdash; ₹${book.price}
-          </button>
-          <button class="qv-fmt-btn" id="qv-fmt-ebook"
-            onclick="selectQVFormat('ebook',${book.price},${ebookPrice})">
-            📱 eBook &mdash; ₹${ebookPrice}
-          </button>
-        </div>` : '';
+    <div class="qv-format-toggles">
+      <button class="qv-fmt-toggle selected" id="qv-fmt-physical" onclick="selectQVFormat('physical',${book.price},${ebookPrice})">
+        <span class="qv-fmt-name">Physical</span>
+        <span class="qv-fmt-price">₹${book.price}</span>
+      </button>
+      <button class="qv-fmt-toggle" id="qv-fmt-ebook" onclick="selectQVFormat('ebook',${book.price},${ebookPrice})">
+        <span class="qv-fmt-name">eBook</span>
+        <span class="qv-fmt-price">₹${ebookPrice}</span>
+      </button>
+    </div>
+  ` : `
+    <div class="qv-format-toggles single-format">
+      <button class="qv-fmt-toggle selected" id="qv-fmt-physical" onclick="selectQVFormat('physical',${book.price},${ebookPrice})">
+        <span class="qv-fmt-name">Physical Only</span>
+        <span class="qv-fmt-price">₹${book.price}</span>
+      </button>
+    </div>
+  `;
 
   const body = document.getElementById('quick-view-body');
   if (!body) return;
 
+  const fallbackSvg = generateEditorialCoverSvg(book.title, book.author, book.category);
+
   body.innerHTML = `
-        <div class="qv-body">
-          <div class="qv-cover-side">
-            <img class="qv-cover-img"
-              src="${escHtml(book.image)}"
-              alt="${escHtml(book.title)}"
-              onerror="this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22300%22 height=%22400%22%3E%3Crect fill=%22%236366f1%22 width=%22300%22 height=%22400%22/%3E%3Ctext x=%2250%25%22 y=%2250%25%22 fill=%22white%22 font-size=%2240%22 text-anchor=%22middle%22 dy=%22.3em%22%3E📚%3C/text%3E%3C/svg%3E'" />
+    <div class="qv-body">
+      <div class="qv-cover-side">
+        <img class="qv-cover-img"
+          src="${escHtml(book.image || fallbackSvg)}"
+          alt="${escHtml(book.title)}"
+          loading="lazy"
+          onload="if(this.naturalWidth<=1||this.naturalHeight<=1){this.onerror=null;this.onload=null;this.src='${fallbackSvg}';}"
+          onerror="this.onerror=null;this.onload=null;this.src='${fallbackSvg}';" />
+      </div>
+      <div class="qv-details-side">
+        <div class="qv-badge-row">
+          <span class="qv-badge">${escHtml(book.badge || 'Bestseller')}</span>
+          <span class="qv-badge">${escHtml(book.category)}</span>
+          ${book.ebook ? '<span class="qv-badge">eBook</span>' : ''}
+        </div>
+        
+        <h2 class="qv-title">${escHtml(book.title)}</h2>
+        <div class="qv-author">by ${escHtml(book.author)}</div>
+        
+        <div class="qv-rating-row" aria-label="${book.rating} out of 5 stars">
+          <span class="qv-stars">${starsHtml}</span>
+          <span class="qv-rating-num">${book.rating}</span>
+          <span class="qv-reviews">${totalReviews} reviews</span>
+        </div>
+        
+        <div class="qv-divider"></div>
+        
+        <div class="qv-desc-section">
+          <h3 class="qv-section-title">ABOUT THIS BOOK</h3>
+          <p class="qv-desc">${escHtml(desc)}</p>
+        </div>
+        
+        <div class="qv-metadata-section">
+          <h3 class="qv-section-title">BOOK DETAILS</h3>
+          <dl class="qv-metadata-grid">
+            <div class="qv-meta-item"><dt>Category</dt><dd>${escHtml(book.category)}</dd></div>
+            <div class="qv-meta-item"><dt>Format</dt><dd>${book.ebook ? 'Physical + eBook' : 'Physical Only'}</dd></div>
+            <div class="qv-meta-item"><dt>Availability</dt><dd>In Stock</dd></div>
+          </dl>
+        </div>
+
+        <div class="qv-divider"></div>
+
+        <div class="qv-purchase-section">
+          <h3 class="qv-section-title">PURCHASE OPTIONS</h3>
+          ${formatRow}
+          
+          <div class="qv-cta-row">
+            <button class="btn btn-editorial-primary qv-add-cart-btn" id="qv-add-btn" onclick="qvAddToCart(${book.id})">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 8px;">
+                <circle cx="9" cy="21" r="1"></circle><circle cx="20" cy="21" r="1"></circle><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>
+              </svg>
+              ADD TO CART
+            </button>
           </div>
-          <div class="qv-details-side">
-            <div class="qv-badge-row">
-              <span class="qv-badge">${escHtml(book.badge || 'Bestseller')}</span>
-              <span class="qv-tag">📂 ${escHtml(book.category)}</span>
-              ${book.ebook ? '<span class="qv-tag">📱 eBook</span>' : ''}
-            </div>
-            <div class="qv-title">${escHtml(book.title)}</div>
-            <div class="qv-author">by ${escHtml(book.author)}</div>
-            <div class="qv-rating-row">
-              <span class="qv-stars">${stars}</span>
-              <span class="qv-rating-num">${book.rating}</span>
-              <span class="qv-reviews">(${totalReviews} reviews)</span>
-            </div>
-            <div class="qv-divider"></div>
-            <div class="qv-desc">${escHtml(desc)}</div>
-            <div class="qv-info-grid">
-              <div class="qv-info-item">
-                <div class="qv-info-label">Category</div>
-                <div class="qv-info-value">${escHtml(book.category)}</div>
-              </div>
-              <div class="qv-info-item">
-                <div class="qv-info-label">Format</div>
-                <div class="qv-info-value">${book.ebook ? 'Physical + eBook' : 'Physical Only'}</div>
-              </div>
-              <div class="qv-info-item">
-                <div class="qv-info-label">Rating</div>
-                <div class="qv-info-value">${book.rating} / 5.0 ⭐</div>
-              </div>
-              <div class="qv-info-item">
-                <div class="qv-info-label">Total Reviews</div>
-                <div class="qv-info-value">${totalReviews}</div>
-              </div>
-            </div>
-            ${formatRow}
-            <div class="qv-price-row">
-              <div class="qv-price" id="qv-price">₹${book.price}</div>
-              <button class="qv-add-btn" id="qv-add-btn" onclick="qvAddToCart(${book.id})">
-                🛒 Add to Cart
-              </button>
-            </div>
-          </div>
-        </div>`;
+        </div>
+      </div>
+    </div>
+  `;
 
   const modal = document.getElementById('quick-view-modal');
-  if (modal) { modal.classList.add('active'); document.body.style.overflow = 'hidden'; }
+  if (modal) { 
+    modal.classList.add('active'); 
+    modal.setAttribute('aria-hidden', 'false');
+    document.body.style.overflow = 'hidden'; 
+  }
 }
 
 function selectQVFormat(fmt, physPrice, ebookPrice) {
   _qvFmt = fmt;
   const pBtn = document.getElementById('qv-fmt-physical');
   const eBtn = document.getElementById('qv-fmt-ebook');
-  const pEl = document.getElementById('qv-price');
   if (pBtn) pBtn.classList.toggle('selected', fmt === 'physical');
   if (eBtn) eBtn.classList.toggle('selected', fmt === 'ebook');
-  if (pEl) pEl.textContent = '₹' + (fmt === 'ebook' ? ebookPrice : physPrice);
 }
 
 function qvAddToCart(bookId) {
   addToCart(bookId, _qvFmt);
   const btn = document.getElementById('qv-add-btn');
   if (btn) {
-    btn.textContent = '✅ Added to Cart!';
+    btn.innerHTML = '✓ ADDED TO CART';
     btn.classList.add('added');
     setTimeout(() => {
-      btn.textContent = '🛒 Add to Cart';
+      btn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 8px;"><circle cx="9" cy="21" r="1"></circle><circle cx="20" cy="21" r="1"></circle><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path></svg> ADD TO CART';
       btn.classList.remove('added');
     }, 2000);
   }
@@ -2417,7 +2594,11 @@ function qvAddToCart(bookId) {
 
 function closeQuickView() {
   const modal = document.getElementById('quick-view-modal');
-  if (modal) { modal.classList.remove('active'); document.body.style.overflow = 'auto'; }
+  if (modal) { 
+    modal.classList.remove('active'); 
+    modal.setAttribute('aria-hidden', 'true');
+    document.body.style.overflow = '';
+  }
 }
 
 // ---- Scroll-reveal (IntersectionObserver) ----
@@ -2458,59 +2639,321 @@ function observeBookCards() {
 
 
 
-// ---- Particle System ----
-function initParticles() {
-  const canvas = document.getElementById('particles-canvas');
-  if (!canvas) return;
-  const ctx = canvas.getContext('2d');
-  let W, H, particles;
+// =============================================================================
+// BOOKHAVEN EDITORIAL & CINEMATIC CONTROLLERS
+// =============================================================================
 
-  function resize() {
-    W = canvas.width = canvas.offsetWidth;
-    H = canvas.height = canvas.offsetHeight;
-  }
-  window.addEventListener('resize', resize);
-  resize();
+// ---- 1. Cinematic Intro Controller ----
+function initCinematicIntro() {
+  const overlay = document.getElementById('intro-overlay');
+  const video = document.getElementById('intro-video');
+  const skipBtn = document.getElementById('skip-intro-btn');
+  const replayBtn = document.getElementById('replay-intro-btn');
 
-  const NUM = 55;
-  particles = Array.from({ length: NUM }, () => createParticle());
+  if (!overlay || !video) return;
 
-  function createParticle(fromBottom = false) {
-    return {
-      x: Math.random() * W,
-      y: fromBottom ? H + 10 : Math.random() * H,
-      r: Math.random() * 3 + 1,
-      vx: (Math.random() - 0.5) * 0.5,
-      vy: -(Math.random() * 0.8 + 0.2),
-      alpha: Math.random() * 0.5 + 0.1,
-      color: ['255,255,255', '200,180,255', '180,210,255'][Math.floor(Math.random() * 3)]
-    };
+  const prefersReduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const introSeen = sessionStorage.getItem('bookhaven_intro_seen');
+
+  function dismissIntro() {
+    overlay.classList.add('fade-out');
+    try { video.pause(); } catch (_) {}
+    sessionStorage.setItem('bookhaven_intro_seen', 'true');
+    setTimeout(() => { overlay.style.display = 'none'; }, 850);
   }
 
-  function draw() {
-    ctx.clearRect(0, 0, W, H);
-    particles.forEach((p, i) => {
-      p.x += p.vx;
-      p.y += p.vy;
-      p.alpha -= 0.0015;
-      if (p.y < -10 || p.alpha <= 0) particles[i] = createParticle(true);
+  if (prefersReduced || introSeen) {
+    overlay.style.display = 'none';
+  } else {
+    video.currentTime = 0;
+    const playPromise = video.play();
+    if (playPromise !== undefined) {
+      playPromise.catch(() => {
+        // Autoplay restricted — dismiss cleanly
+        dismissIntro();
+      });
+    }
 
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(${p.color},${Math.max(0, p.alpha)})`;
-      ctx.fill();
+    video.addEventListener('ended', () => {
+      setTimeout(dismissIntro, 600);
     });
-    requestAnimationFrame(draw);
+
+    // Fallback timer (10.5s max)
+    setTimeout(() => {
+      if (!overlay.classList.contains('fade-out')) {
+        dismissIntro();
+      }
+    }, 10500);
   }
-  draw();
+
+  if (skipBtn) {
+    skipBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      dismissIntro();
+    });
+  }
+
+  if (replayBtn) {
+    replayBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      overlay.style.display = 'flex';
+      overlay.classList.remove('fade-out');
+      video.currentTime = 0;
+      video.play().catch(() => {});
+    });
+  }
+
+  window.replayIntro = function() {
+    if (replayBtn) replayBtn.click();
+  };
+}
+
+// ---- 2. Live Search Modal ----
+function initSearchModal() {
+  const modal = document.getElementById('search-modal');
+  const trigger = document.getElementById('search-trigger-btn');
+  const closeBtn = document.getElementById('search-modal-close');
+  const backdrop = document.getElementById('search-modal-backdrop');
+  const input = document.getElementById('global-search-input');
+  const resultsList = document.getElementById('search-results-list');
+  const tags = document.querySelectorAll('.search-tag');
+
+  if (!modal || !input) return;
+
+  function openSearch() {
+    modal.classList.add('active');
+    document.body.style.overflow = 'hidden';
+    setTimeout(() => input.focus(), 150);
+    renderSearchResults(input.value.trim());
+  }
+
+  function closeSearch() {
+    modal.classList.remove('active');
+    document.body.style.overflow = 'auto';
+    input.value = '';
+  }
+
+  if (trigger) trigger.addEventListener('click', openSearch);
+  if (closeBtn) closeBtn.addEventListener('click', closeSearch);
+  if (backdrop) backdrop.addEventListener('click', closeSearch);
+
+  // Keyboard shortcut: ⌘K or Ctrl+K
+  document.addEventListener('keydown', (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+      e.preventDefault();
+      if (modal.classList.contains('active')) closeSearch();
+      else openSearch();
+    } else if (e.key === 'Escape' && modal.classList.contains('active')) {
+      closeSearch();
+    }
+  });
+
+  input.addEventListener('input', () => {
+    renderSearchResults(input.value.trim());
+  });
+
+  tags.forEach(tag => {
+    tag.addEventListener('click', () => {
+      input.value = tag.dataset.query;
+      renderSearchResults(tag.dataset.query);
+    });
+  });
+
+  function renderSearchResults(query) {
+    if (!resultsList) return;
+    const q = query.toLowerCase();
+    const sourceBooks = Array.isArray(window.books) && window.books.length > 0 ? window.books : books;
+    const matched = q
+      ? sourceBooks.filter(b => b.title.toLowerCase().includes(q) || b.author.toLowerCase().includes(q) || (b.category && b.category.toLowerCase().includes(q)))
+      : sourceBooks.slice(0, 6);
+
+    if (matched.length === 0) {
+      resultsList.innerHTML = `<div style="padding:1.5rem;text-align:center;color:var(--text-muted);font-size:0.9rem;">No volumes found matching "${escHtml(query)}". Try searching another keyword or author.</div>`;
+      return;
+    }
+
+    resultsList.innerHTML = matched.slice(0, 6).map(b => {
+      const fallbackSvg = generateEditorialCoverSvg(b.title, b.author, b.category);
+      return `
+      <div class="search-result-row" onclick="openQuickView(${b.id}); document.getElementById('search-modal').classList.remove('active'); document.body.style.overflow='auto';">
+        <img src="${escHtml(b.image || fallbackSvg)}" 
+             alt="${escHtml(b.title)}" 
+             class="search-result-thumb" 
+             loading="lazy"
+             onload="if(this.naturalWidth<=1||this.naturalHeight<=1){this.onerror=null;this.onload=null;this.src='${fallbackSvg}';}" 
+             onerror="this.onerror=null;this.onload=null;this.src='${fallbackSvg}';" />
+        <div class="search-result-details">
+          <div class="search-result-title">${escHtml(b.title)}</div>
+          <div class="search-result-author">${escHtml(b.author)} • ${escHtml(b.category || 'Books')}</div>
+        </div>
+        <div class="search-result-price">${formatINR(b.price)}</div>
+      </div>`;
+    }).join('');
+  }
+}
+
+// ---- 3. Bestsellers Tabs ----
+function renderBestsellers(tab = 'all') {
+  const container = document.getElementById('bestsellers-container');
+  if (!container) return;
+  const sourceBooks = Array.isArray(window.books) && window.books.length > 0 ? window.books : books;
+  let filtered = sourceBooks;
+  if (tab === 'Fiction') filtered = sourceBooks.filter(b => b.category === 'Fiction');
+  else if (tab === 'Self-Help') filtered = sourceBooks.filter(b => b.category === 'Self-Help');
+  else if (tab === 'Business') filtered = sourceBooks.filter(b => b.category === 'Business');
+  else if (tab === 'Classics') filtered = sourceBooks.filter(b => b.category === 'Classics');
+
+  container.innerHTML = filtered.slice(0, 8).map(b => buildBookCard(b)).join('');
+}
+
+function initBestsellerTabs() {
+  const tabs = document.querySelectorAll('.bestseller-tab');
+  tabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      tabs.forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      renderBestsellers(tab.dataset.bestsellerTab);
+    });
+  });
+}
+
+// ---- 4. New Arrivals ----
+function renderNewArrivals() {
+  const container = document.getElementById('new-arrivals-container');
+  if (!container) return;
+  const sourceBooks = Array.isArray(window.books) && window.books.length > 0 ? window.books : books;
+  const fresh = sourceBooks.slice(14, 22);
+  container.innerHTML = fresh.map(b => buildBookCard(b)).join('');
+}
+
+// ---- 5. Trending Carousel Controls ----
+function initTrendingCarousel() {
+  const wrap = document.querySelector('.trending-carousel-wrap');
+  const prevBtn = document.getElementById('trending-prev');
+  const nextBtn = document.getElementById('trending-next');
+  if (!wrap || !prevBtn || !nextBtn) return;
+
+  prevBtn.addEventListener('click', () => {
+    wrap.scrollBy({ left: -340, behavior: 'smooth' });
+  });
+  nextBtn.addEventListener('click', () => {
+    wrap.scrollBy({ left: 340, behavior: 'smooth' });
+  });
+}
+
+// ---- 6. Mobile Drawer ----
+function initMobileDrawer() {
+  const toggle = document.getElementById('mobile-nav-toggle');
+  const drawer = document.getElementById('mobile-nav-drawer');
+  const closeBtn = document.getElementById('mobile-nav-close');
+  const backdrop = document.getElementById('drawer-backdrop');
+
+  if (!toggle || !drawer) return;
+
+  function openDrawer() {
+    drawer.classList.add('active');
+    if (backdrop) backdrop.classList.add('active');
+    document.body.style.overflow = 'hidden';
+  }
+
+  function closeDrawer() {
+    drawer.classList.remove('active');
+    if (backdrop) backdrop.classList.remove('active');
+    document.body.style.overflow = 'auto';
+  }
+
+  toggle.addEventListener('click', openDrawer);
+  if (closeBtn) closeBtn.addEventListener('click', closeDrawer);
+  if (backdrop) backdrop.addEventListener('click', closeDrawer);
+
+  document.querySelectorAll('.mobile-nav-links a').forEach(a => {
+    a.addEventListener('click', closeDrawer);
+  });
+}
+
+// ---- 7. Category Discovery Cards Click ----
+function initCategoryCards() {
+  const cards = document.querySelectorAll('.category-card[data-category]');
+  cards.forEach(card => {
+    card.addEventListener('click', () => {
+      const cat = card.dataset.category;
+      const pill = document.querySelector(`.filter-pill[data-category="${cat}"]`);
+      if (pill) {
+        pill.click();
+      } else {
+        generateBooks(cat);
+      }
+      const target = document.getElementById('books');
+      if (target) target.scrollIntoView({ behavior: 'smooth' });
+    });
+  });
+
+  const ebookBtn = document.getElementById('filter-ebook-btn');
+  if (ebookBtn) {
+    ebookBtn.addEventListener('click', () => {
+      const pill = document.querySelector('.filter-pill[data-ebook-filter]');
+      if (pill) pill.click();
+      else generateBooks('eBook');
+      const target = document.getElementById('books');
+      if (target) target.scrollIntoView({ behavior: 'smooth' });
+    });
+  }
+}
+
+// ---- 8. Refined Toast Notification System ----
+function showNotification(message, type = 'success') {
+  const container = document.getElementById('toast-container');
+  if (!container) return;
+
+  const toast = document.createElement('div');
+  toast.className = 'toast-notification';
+  toast.innerHTML = `
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#B28A4A" stroke-width="2">
+      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+    </svg>
+    <span>${escHtml(message)}</span>
+  `;
+  container.appendChild(toast);
+
+  setTimeout(() => {
+    toast.style.opacity = '0';
+    toast.style.transform = 'translateY(10px)';
+    toast.style.transition = 'all 0.3s ease';
+    setTimeout(() => toast.remove(), 300);
+  }, 3200);
+}
+
+// ---- 9. Wishlist Header Button ----
+function initWishlistHeaderBtn() {
+  const btn = document.getElementById('wishlist-btn-header');
+  if (btn) {
+    btn.addEventListener('click', () => {
+      openWishlistModal();
+    });
+  }
 }
 
 // ---- Header Scroll Logic ----
 window.addEventListener('scroll', () => {
   const header = document.querySelector('header');
-  if (window.scrollY > 50) {
-    header.classList.add('header-scrolled');
-  } else {
-    header.classList.remove('header-scrolled');
+  if (header) {
+    if (window.scrollY > 40) {
+      header.classList.add('header-scrolled');
+    } else {
+      header.classList.remove('header-scrolled');
+    }
   }
+});
+
+// ---- Initialize All on Load ----
+window.addEventListener('DOMContentLoaded', () => {
+  initCinematicIntro();
+  initSearchModal();
+  initBestsellerTabs();
+  renderBestsellers('all');
+  renderNewArrivals();
+  initTrendingCarousel();
+  initMobileDrawer();
+  initCategoryCards();
+  initWishlistHeaderBtn();
 });

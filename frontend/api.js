@@ -12,7 +12,7 @@
   'use strict';
 
   // ─── Config ─────────────────────────────────────────────────────────────────
-  const API_BASE = 'http://127.0.0.1:8000/api';
+  const API_BASE = window.BOOKHAVEN_API_URL || 'http://127.0.0.1:8001/api';
   const CLERK_PUBLISHABLE_KEY = 'pk_test_cmVhZHktc3RhZy0xMDIzLmNsZXJrLmFjY291bnRzLmRldiQ';
   window.wishlist = [];
 
@@ -53,6 +53,8 @@
   function extractError(data) {
     if (!data) return 'Something went wrong.';
     if (typeof data === 'string') return data;
+    if (data.error && data.error.message) return data.error.message;
+    if (data.detail) return data.detail;
     const vals = Object.values(data);
     if (vals.length === 0) return 'Something went wrong.';
     const first = vals[0];
@@ -231,12 +233,12 @@
         window.Clerk.load({
           appearance: {
             variables: {
-              colorPrimary: '#6366f1',
-              colorBackground: '#0f172a',
-              colorText: '#f1f5f9',
-              colorInputBackground: '#1e293b',
-              colorInputText: '#f1f5f9',
-              borderRadius: '12px',
+              colorPrimary: '#7A263A',
+              colorBackground: '#F8F5EF',
+              colorText: '#1C1C1A',
+              colorInputBackground: '#FFFFFF',
+              colorInputText: '#1C1C1A',
+              borderRadius: '4px',
             },
           },
         }).then(() => {
