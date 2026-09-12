@@ -175,47 +175,30 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 CORS_ALLOW_ALL_ORIGINS = False
 CORS_ALLOW_CREDENTIALS = True
 
+DEFAULT_ORIGINS = [
+    'http://localhost:3000',
+    'http://127.0.0.1:3000',
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+    'http://localhost:5500',
+    'http://127.0.0.1:5500',
+    'http://localhost:8000',
+    'http://127.0.0.1:8000',
+    'http://localhost:8001',
+    'http://127.0.0.1:8001',
+    'http://localhost:8080',
+    'http://127.0.0.1:8080',
+    'https://chetanj2929.github.io',
+    'https://bookhaven-website.onrender.com',
+]
+
 raw_cors = os.getenv('CORS_ALLOWED_ORIGINS', '')
-if raw_cors:
-    CORS_ALLOWED_ORIGINS = [origin.strip() for origin in raw_cors.split(',') if origin.strip()]
-elif DEBUG:
-    CORS_ALLOWED_ORIGINS = [
-        'http://localhost:3000',
-        'http://127.0.0.1:3000',
-        'http://localhost:5173',
-        'http://127.0.0.1:5173',
-        'http://localhost:5500',
-        'http://127.0.0.1:5500',
-        'http://localhost:8000',
-        'http://127.0.0.1:8000',
-        'http://localhost:8001',
-        'http://127.0.0.1:8001',
-        'http://localhost:8080',
-        'http://127.0.0.1:8080',
-    ]
-else:
-    CORS_ALLOWED_ORIGINS = []
+parsed_cors = [origin.strip() for origin in raw_cors.split(',') if origin.strip()] if raw_cors else []
+CORS_ALLOWED_ORIGINS = list(dict.fromkeys(DEFAULT_ORIGINS + parsed_cors))
 
 raw_csrf = os.getenv('CSRF_TRUSTED_ORIGINS', '')
-if raw_csrf:
-    CSRF_TRUSTED_ORIGINS = [origin.strip() for origin in raw_csrf.split(',') if origin.strip()]
-elif DEBUG:
-    CSRF_TRUSTED_ORIGINS = [
-        'http://localhost:3000',
-        'http://127.0.0.1:3000',
-        'http://localhost:5173',
-        'http://127.0.0.1:5173',
-        'http://localhost:5500',
-        'http://127.0.0.1:5500',
-        'http://localhost:8000',
-        'http://127.0.0.1:8000',
-        'http://localhost:8001',
-        'http://127.0.0.1:8001',
-        'http://localhost:8080',
-        'http://127.0.0.1:8080',
-    ]
-else:
-    CSRF_TRUSTED_ORIGINS = []
+parsed_csrf = [origin.strip() for origin in raw_csrf.split(',') if origin.strip()] if raw_csrf else []
+CSRF_TRUSTED_ORIGINS = list(dict.fromkeys(DEFAULT_ORIGINS + parsed_csrf))
 
 # ─── Production Security Headers ──────────────────────────────────────────────
 if not DEBUG:
