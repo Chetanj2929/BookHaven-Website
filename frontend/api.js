@@ -294,9 +294,40 @@
     }
   }
 
+  const LOCAL_BOOK_COVERS = {
+    1: 'assets/book-1-sapiens.jpg',
+    2: 'assets/book-2-atomic-habits.jpg',
+    3: 'assets/book-3-1984.jpg',
+    4: 'assets/harry-potter.jpg',
+    5: 'assets/book-5-the-alchemist.jpg',
+    6: 'assets/book-6-psychology-of-money.jpg',
+    7: 'assets/book-7-the-great-gatsby.jpg',
+    8: 'assets/book-8-deep-work.jpg',
+    9: 'assets/book-9-the-hobbit.jpg',
+    10: 'assets/book-10-dune.jpg',
+    11: 'assets/book-11-thinking-fast-and-slow.jpg',
+    12: 'assets/book-12-to-kill-a-mockingbird.jpg',
+    13: 'assets/book-13-the-da-vinci-code.jpg',
+    14: 'assets/book-14-gone-girl.jpg',
+    15: 'assets/book-15-the-martian.jpg',
+    16: 'assets/book-16-zero-to-one.jpg',
+    17: 'assets/book-17-the-lean-startup.jpg',
+    18: 'assets/book-18-steve-jobs.jpg',
+    19: 'assets/book-19-elon-musk.jpg',
+    20: 'assets/book-20-brave-new-world.jpg',
+    21: 'assets/book-21-the-girl-with-the-dragon-tattoo.jpg',
+    22: 'assets/book-22-enders-game.jpg',
+    23: 'assets/book-23-the-7-habits.jpg',
+    24: 'assets/book-24-good-to-great.jpg',
+    25: 'assets/book-25-the-power-of-now.jpg',
+    26: 'assets/book-26-born-a-crime.jpg',
+    27: 'assets/book-27-a-brief-history-of-time.jpg',
+    28: 'assets/book-28-the-silent-patient.jpg',
+  };
+
   // Map Django API fields to the shape script.js expects
   function mapApiBook(b) {
-    let coverImg = b.image_url;
+    let coverImg = LOCAL_BOOK_COVERS[b.id] || b.image_url;
     if (b.id === 4 || (b.title && b.title.toLowerCase().includes('harry potter'))) {
       coverImg = 'assets/harry-potter.jpg';
     }
