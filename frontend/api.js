@@ -296,13 +296,17 @@
 
   // Map Django API fields to the shape script.js expects
   function mapApiBook(b) {
+    let coverImg = b.image_url;
+    if (b.id === 4 || (b.title && b.title.toLowerCase().includes('harry potter'))) {
+      coverImg = 'assets/harry-potter.jpg';
+    }
     return {
       id: b.id,
       title: b.title,
       author: b.author,
       price: b.price,
       category: b.category,
-      image: b.image_url,
+      image: coverImg,
       rating: b.user_rating || b.rating,
       reviews: b.total_reviews || b.reviews_count,
       ebook: b.is_ebook,
